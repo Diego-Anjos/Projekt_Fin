@@ -12,45 +12,56 @@ import {
   useXAxisScale,
   useYAxisScale,
 } from "recharts";
+import type { PerformanceData } from "@/types/dashboard";
 
-const performance = [
-  { id: "jan-1", month: "Jan", value: 109200 },
-  { id: "jan-2", month: "", value: 113800 },
-  { id: "jan-3", month: "", value: 108400 },
-  { id: "jan-4", month: "", value: 114600 },
-  { id: "feb-1", month: "Feb", value: 111200 },
-  { id: "feb-2", month: "", value: 117900 },
-  { id: "feb-3", month: "", value: 115100 },
-  { id: "feb-4", month: "", value: 120400 },
-  { id: "mar-1", month: "Mar", value: 125400 },
-  { id: "mar-2", month: "", value: 119800 },
-  { id: "mar-3", month: "", value: 122600 },
-  { id: "mar-4", month: "", value: 118200 },
-  { id: "apr-1", month: "Apr", value: 123900 },
-  { id: "apr-2", month: "", value: 121100 },
-  { id: "apr-3", month: "", value: 126700 },
-  { id: "apr-4", month: "", value: 124200 },
-  { id: "may-1", month: "May", value: 128800 },
-  { id: "may-2", month: "", value: 125600 },
-  { id: "may-3", month: "", value: 129900 },
-  { id: "may-4", month: "", value: 127400 },
-  { id: "jun-1", month: "Jun", value: 131600 },
-  { id: "jun-2", month: "", value: 128300 },
-  { id: "jun-3", month: "", value: 132400 },
-  { id: "jun-4", month: "", value: 130500 },
-];
+type ChartPoint = {
+  id: string;
+  month: string;
+  value: number;
+};
 
-const highlightedPoint = performance.find((point) => point.month === "Mar")!;
-
-const currency = new Intl.NumberFormat("pt-BR", {
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
 
-export function PortfolioPerformanceChart() {
+const calloutFormatter = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+export function PortfolioPerformance({ data }: { data: PerformanceData }) {
+  const points: ChartPoint[] = data.map((point, index) => ({
+    id: String(index),
+    month: point.month,
+    value: point.value,
+  }));
+  const highlighted = points.at(-1);
+
+  return (
+    <article className="rounded-xl border border-zinc-700/50 bg-black p-4 xl:col-span-2">
+      <h3 className="text-sm font-semibold text-zinc-100">Portfolio Performance</h3>
+      <div className="mt-4 h-64">
+        {highlighted ? (
+          <PerformanceChart points={points} highlighted={highlighted} />
+        ) : (
+          <p className="text-sm text-zinc-400">Sem dados de performance.</p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function PerformanceChart({
+  points,
+  highlighted,
+}: {
+  points: ChartPoint[];
+  highlighted: ChartPoint;
+}) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={performance} margin={{ top: 36, right: 8, left: 8, bottom: 0 }}>
+      <AreaChart data={points} margin={{ top: 36, right: 8, left: 8, bottom: 0 }}>
         <defs>
           <linearGradient id="portfolioFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#10b981" stopOpacity={0.75} />
@@ -66,9 +77,7 @@ export function PortfolioPerformanceChart() {
           tickLine={false}
           tick={{ fill: "#a1a1aa", fontSize: 12 }}
           dy={8}
-          tickFormatter={(id: string) =>
-            performance.find((point) => point.id === id)?.month ?? ""
-          }
+          tickFormatter={(id: string) => points.find((point) => point.id === id)?.month ?? ""}
         />
         <YAxis hide />
         <Tooltip
@@ -81,10 +90,8 @@ export function PortfolioPerformanceChart() {
           }}
           labelStyle={{ color: "#a1a1aa" }}
           itemStyle={{ color: "#10b981" }}
-          labelFormatter={(id) =>
-            performance.find((point) => point.id === id)?.month || "Semana"
-          }
-          formatter={(value) => [currency.format(Number(value)), "Patrimônio"]}
+          labelFormatter={(id) => points.find((point) => point.id === String(id))?.month || "Semana"}
+          formatter={(value) => [currencyFormatter.format(Number(value)), "Patrimônio"]}
         />
         <Area
           type="linear"
@@ -96,13 +103,13 @@ export function PortfolioPerformanceChart() {
           dot={false}
           activeDot={{ r: 3, fill: "#34d399", stroke: "#09090b", strokeWidth: 2 }}
         />
-        <MarchCallout />
+        <ValueCallout point={highlighted} />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
-function MarchCallout() {
+function ValueCallout({ point }: { point: ChartPoint }) {
   const xScale = useXAxisScale();
   const yScale = useYAxisScale();
   const plot = usePlotArea();
@@ -111,28 +118,21 @@ function MarchCallout() {
     return null;
   }
 
-  const x = xScale(highlightedPoint.id);
-  const y = yScale(highlightedPoint.value);
+  const x = xScale(point.id);
+  const y = yScale(point.value);
 
   if (x == null || y == null) {
     return null;
   }
 
   const axisY = plot.y + plot.height;
-  const label = "R$ 125.4k";
-  const labelWidth = 72;
+  const label = `R$ ${calloutFormatter.format(point.value)}`;
+  const labelWidth = Math.max(72, label.length * 7);
   const labelHeight = 22;
 
   return (
     <g>
-      <line
-        x1={x}
-        y1={y}
-        x2={x}
-        y2={axisY}
-        stroke="#71717a"
-        strokeWidth={1}
-      />
+      <line x1={x} y1={y} x2={x} y2={axisY} stroke="#71717a" strokeWidth={1} />
       <circle cx={x} cy={y} r={5} fill="#34d399" stroke="#ecfdf5" strokeWidth={2} />
       <rect
         x={x - labelWidth / 2}
@@ -143,14 +143,7 @@ function MarchCallout() {
         fill="#18181b"
         stroke="#27272a"
       />
-      <text
-        x={x}
-        y={y - 22}
-        textAnchor="middle"
-        fill="#f4f4f5"
-        fontSize={11}
-        fontWeight={600}
-      >
+      <text x={x} y={y - 22} textAnchor="middle" fill="#f4f4f5" fontSize={11} fontWeight={600}>
         {label}
       </text>
     </g>
