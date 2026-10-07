@@ -18,7 +18,7 @@ import { usePathname } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const navItems: { labelKey: string; href: string; icon: LucideIcon }[] = [
-  { labelKey: "sidebar.marketHub", href: "/", icon: LayoutGrid },
+  { labelKey: "sidebar.marketHub", href: "/dashboard", icon: LayoutGrid },
   { labelKey: "sidebar.purchases", href: "/compras", icon: ShoppingBag },
   { labelKey: "sidebar.subscriptions", href: "/subscriptions", icon: Layers },
   { labelKey: "sidebar.cashFlow", href: "/cash-flow", icon: ChartColumn },
@@ -37,7 +37,7 @@ export function Sidebar() {
       className="flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-800 bg-[#041610]"
     >
       <div className="px-5 pt-6 pb-5">
-        <Link href="/" className="block w-40">
+        <Link href="/dashboard" className="block w-40">
           <Image
             src="/Logotipo Projekt Fin em fundo transparente.png"
             alt="Logo Projekt Fin"

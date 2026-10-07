@@ -1,153 +1,166 @@
-import { MarketHubCards } from "@/components/market-hub-cards";
-import { NewsTickerCard } from "@/components/NewsTickerCard";
-import { PortfolioKPIs } from "@/components/portfolio-kpis";
-import { PortfolioPerformance } from "@/components/portfolio-performance";
-import { RecentTransactions } from "@/components/recent-transactions";
-import { RecurringSubscriptions } from "@/components/recurring-subscriptions";
-import type { PerformanceData, PortfolioKPIs as PortfolioKpiData, Subscription, Transaction } from "@/types/dashboard";
+"use client";
 
-const portfolioKpis: PortfolioKpiData = {
-  totalWealth: 130500,
-  wealthChangePercent: 1.8,
-  monthlyCashFlow: 4100,
-  allocation: [
-    { type: "Ações", percentage: 35, color: "#065f46" },
-    { type: "Renda Fixa", percentage: 40, color: "#10b981" },
-    { type: "Outros", percentage: 25, color: "#71717a" },
-  ],
-};
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
+import { AmbientBackground } from "@/components/AmbientBackground";
 
-const performanceData: PerformanceData = [
-  { month: "Jan", value: 109200 },
-  { month: "", value: 113800 },
-  { month: "", value: 108400 },
-  { month: "", value: 114600 },
-  { month: "Feb", value: 111200 },
-  { month: "", value: 117900 },
-  { month: "", value: 115100 },
-  { month: "", value: 120400 },
-  { month: "Mar", value: 125400 },
-  { month: "", value: 119800 },
-  { month: "", value: 122600 },
-  { month: "", value: 118200 },
-  { month: "Apr", value: 123900 },
-  { month: "", value: 121100 },
-  { month: "", value: 126700 },
-  { month: "", value: 124200 },
-  { month: "May", value: 128800 },
-  { month: "", value: 125600 },
-  { month: "", value: 129900 },
-  { month: "", value: 127400 },
-  { month: "Jun", value: 131600 },
-  { month: "", value: 128300 },
-  { month: "", value: 132400 },
-  { month: "", value: 130500 },
-];
+const Logo3D = dynamic(() => import("@/components/Logo3D"), { ssr: false });
 
-const transactions: Transaction[] = [
-  {
-    id: "#4821",
-    date: "05 Out",
-    description: "Compra no mercado",
-    category: "Cart",
-    amount: 186.4,
-    status: "Paid",
-  },
-  {
-    id: "#4820",
-    date: "04 Out",
-    description: "Mensalidade da academia",
-    category: "Fitness",
-    amount: 129.9,
-    status: "Pending",
-  },
-  {
-    id: "#4818",
-    date: "02 Out",
-    description: "Almoço de trabalho",
-    category: "Food",
-    amount: 64,
-    status: "Paid",
-  },
-];
+const fieldClassName =
+  "w-full rounded-lg border border-white/10 bg-[#050f0c] px-4 py-3 text-sm text-white outline-none transition duration-200 placeholder:text-white/30 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/40";
 
-const subscriptions: Subscription[] = [
-  {
-    id: "netflix",
-    name: "Netflix",
-    date: "Today, 07:08",
-    amount: 55.9,
-    renewalDate: "Renova 12 Out",
-  },
-  {
-    id: "spotify",
-    name: "Spotify",
-    date: "Today, 09:14",
-    amount: 21.9,
-    renewalDate: "Renova 18 Out",
-  },
-  {
-    id: "academia",
-    name: "Academia",
-    date: "Today, 18:02",
-    amount: 129.9,
-    renewalDate: "Renova 02 Nov",
-  },
-];
-
-const contributionLevels = [
-  [0, 1, 2, 1, 3, 2, 0, 1, 2, 3, 1, 0, 2, 1, 3, 2, 0, 1],
-  [1, 2, 0, 3, 1, 2, 3, 0, 1, 2, 3, 2, 1, 0, 2, 3, 1, 2],
-  [2, 0, 1, 2, 3, 1, 0, 2, 3, 1, 0, 1, 3, 2, 1, 0, 2, 3],
-  [0, 3, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 3, 0, 1, 2, 0, 1],
-];
-
-const contributionTones = ["bg-zinc-800", "bg-emerald-800", "bg-emerald-600", "bg-emerald-400"];
-
-export default function Home() {
+function GoogleIcon() {
   return (
-    <div className="flex min-h-full flex-col gap-8 p-6">
-      <section aria-labelledby="market-hub-heading">
-        <MarketHubCards news={<NewsTickerCard />} />
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
+  );
+}
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
+
+  function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    router.push("/dashboard");
+  }
+
+  return (
+    <main className="flex h-screen w-full bg-slate-950">
+      <section className="relative hidden h-full w-1/2 overflow-hidden bg-slate-950 bg-[radial-gradient(circle_at_45%_50%,_rgba(3,46,34,0.65)_0%,_rgba(2,21,17,0.3)_50%,_rgba(2,6,5,0.95)_100%)] lg:flex">
+        <div className="relative h-full w-full">
+          <Logo3D />
+        </div>
+
+        <blockquote className="absolute inset-x-0 bottom-0 z-10 max-w-lg bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent px-12 pt-20 pb-12">
+          <p className="text-lg leading-relaxed font-medium text-white">
+            “O controle financeiro inteligente para a sua vida.”
+          </p>
+          <footer className="mt-3 text-sm text-slate-400">— Projekt Fin</footer>
+        </blockquote>
       </section>
 
-      <section aria-labelledby="portfolio-kpis-heading" className="flex flex-col gap-4">
-        <h2 id="portfolio-kpis-heading" className="text-base font-semibold text-zinc-100">
-          Portfolio KPIs
-        </h2>
-        <PortfolioKPIs {...portfolioKpis} />
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <PortfolioPerformance data={performanceData} />
-          <TradesHeatmap />
+      <section className="relative h-full w-full overflow-hidden bg-[#000503] lg:w-1/2">
+        <div className="pointer-events-none absolute inset-0 z-0 opacity-[0.12]">
+          <AmbientBackground contained />
+        </div>
+        <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_8%,#000000_72%)] opacity-90" />
+
+        <div className="relative z-10 flex h-full w-full justify-center overflow-y-auto px-6">
+        <div className="relative z-10 my-auto w-full max-w-md py-10">
+          <h1 className="text-3xl font-bold tracking-tight text-white">
+            Bem-vindo ao Projekt Fin
+          </h1>
+          <p className="mt-2 text-slate-400">
+            Construa o seu futuro financeiro sem esforço.
+          </p>
+
+          <form className="mt-10 space-y-5" onSubmit={handleLogin}>
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Email</span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="seu@email.com"
+                className={fieldClassName}
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Senha</span>
+              <input
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+                className={fieldClassName}
+              />
+            </label>
+
+            <div className="flex items-center justify-between gap-4">
+              <label className="inline-flex cursor-pointer items-center gap-3">
+                <span className="relative inline-flex">
+                  <input
+                    type="checkbox"
+                    name="remember"
+                    checked={remember}
+                    onChange={(event) => setRemember(event.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
+                  <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
+                </span>
+                <span className="text-sm text-slate-300">Lembrar-me</span>
+              </label>
+
+              <a
+                href="#esqueci-senha"
+                className="text-sm text-emerald-400 transition hover:text-emerald-300"
+              >
+                Esqueci minha senha?
+              </a>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+            >
+              Entrar
+            </button>
+          </form>
+
+          <div className="my-8 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-800" />
+            <span className="text-xs tracking-[0.18em] text-slate-500">OU</span>
+            <div className="h-px flex-1 bg-slate-800" />
+          </div>
+
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+          >
+            <GoogleIcon />
+            Continuar com Google
+          </button>
+
+          <p className="mt-8 text-center text-sm text-slate-400">
+            Não tem uma conta?{" "}
+            <a
+              href="#cadastro"
+              className="font-medium text-emerald-400 transition hover:text-emerald-300"
+            >
+              Cadastre-se
+            </a>
+          </p>
+        </div>
         </div>
       </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <RecentTransactions transactions={transactions} />
-        <RecurringSubscriptions subscriptions={subscriptions} />
-      </section>
-    </div>
+    </main>
   );
 }
-
-function TradesHeatmap() {
-  return (
-    <article className="rounded-xl border border-zinc-700/50 bg-black p-4">
-      <h3 className="text-sm font-semibold text-zinc-100">Ações & FIIs</h3>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-zinc-100">
-        260 <span className="text-base font-medium text-zinc-400">trades</span>
-      </p>
-      <div className="mt-5 grid w-full grid-flow-col grid-rows-4 gap-1" aria-hidden="true">
-        {contributionLevels[0].map((_, column) =>
-          contributionLevels.map((row, rowIndex) => (
-            <span
-              key={`${column}-${rowIndex}`}
-              className={`size-4 rounded-[3px] ${contributionTones[row[column]]}`}
-            />
-          )),
-        )}
-      </div>
-    </article>
-  );
-}
-

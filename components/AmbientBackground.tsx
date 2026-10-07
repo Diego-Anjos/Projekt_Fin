@@ -20,8 +20,8 @@ function randomBetween(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
 
-function createParticles(width: number, height: number): Particle[] {
-  return Array.from({ length: PARTICLE_COUNT }, () => ({
+function createParticles(width: number, height: number, count = PARTICLE_COUNT): Particle[] {
+  return Array.from({ length: count }, () => ({
     x: Math.random() * width,
     y: Math.random() * height,
     radius: randomBetween(0.5, 3.5),
@@ -34,7 +34,7 @@ function createParticles(width: number, height: number): Particle[] {
   }));
 }
 
-export function AmbientBackground() {
+export function AmbientBackground({ contained = false }: { contained?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -44,21 +44,34 @@ export function AmbientBackground() {
     const context = canvas.getContext("2d");
     if (!context) return;
 
+    const host = contained ? canvas.parentElement : null;
+
+    const measure = () => {
+      if (host) return { width: host.clientWidth, height: host.clientHeight };
+      return { width: window.innerWidth, height: window.innerHeight };
+    };
+
+    let { width, height } = measure();
+    const fullArea = Math.max(window.innerWidth * window.innerHeight, 1);
+    const count = contained
+      ? Math.max(48, Math.round(PARTICLE_COUNT * ((width * height) / fullArea)))
+      : PARTICLE_COUNT;
+    const particles = createParticles(Math.max(width, 1), Math.max(height, 1), count);
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let tick = 0;
-    const particles = createParticles(window.innerWidth, window.innerHeight);
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const resize = () => {
+      const next = measure();
+      width = next.width;
+      height = next.height;
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * pixelRatio);
-      canvas.height = Math.floor(window.innerHeight * pixelRatio);
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     };
 
     const draw = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
       context.shadowBlur = 0;
       context.clearRect(0, 0, width, height);
       tick += 1;
@@ -103,19 +116,27 @@ export function AmbientBackground() {
 
     resize();
     draw();
-    window.addEventListener("resize", resize);
+
+    const observer = host ? new ResizeObserver(resize) : null;
+    if (host && observer) observer.observe(host);
+    else window.addEventListener("resize", resize);
 
     return () => {
       window.cancelAnimationFrame(frame);
+      observer?.disconnect();
       window.removeEventListener("resize", resize);
     };
-  }, []);
+  }, [contained]);
 
   return (
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
+      className={
+        contained
+          ? "pointer-events-none absolute inset-0 h-full w-full"
+          : "pointer-events-none fixed inset-0 -z-10 h-full w-full"
+      }
     />
   );
 }
