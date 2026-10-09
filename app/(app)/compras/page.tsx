@@ -1,8 +1,10 @@
 "use client";
 
+import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
+import { getTransactions, type TransactionDocument } from "@/lib/appwrite/database";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -12,84 +14,27 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 const controlClassName =
   "h-11 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
-const initialTransactions: PurchaseTransaction[] = [
-  {
-    id: "1",
-    type: "income",
-    description: "Salário mensal",
-    category: "Salário",
-    date: "2026-10-05",
-    amount: 8500,
-    status: "Paid",
-  },
-  {
-    id: "2",
-    type: "expense",
-    description: "Mercado da semana",
-    category: "Alimentação",
-    date: "2026-10-02",
-    amount: 486.9,
-    status: "Paid",
-  },
-  {
-    id: "3",
-    type: "expense",
-    description: "Aluguel",
-    category: "Moradia",
-    date: "2026-10-01",
-    amount: 2200,
-    status: "Pending",
-  },
-  {
-    id: "4",
-    type: "expense",
-    description: "Farmácia",
-    category: "Saúde",
-    date: "2026-10-04",
-    amount: 89.9,
-    status: "Paid",
-  },
-  {
-    id: "5",
-    type: "expense",
-    description: "Netflix",
-    category: "Assinaturas",
-    date: "2026-09-18",
-    amount: 55.9,
-    status: "Paid",
-  },
-  {
-    id: "6",
-    type: "expense",
-    description: "Uber",
-    category: "Transporte",
-    date: "2026-09-22",
-    amount: 34.5,
-    status: "Pending",
-  },
-  {
-    id: "7",
-    type: "income",
-    description: "Freelance design",
-    category: "Outros",
-    date: "2026-09-28",
-    amount: 1200,
-    status: "Paid",
-  },
-  {
-    id: "8",
-    type: "expense",
-    description: "Cinema",
-    category: "Lazer",
-    date: "2026-08-15",
-    amount: 64,
-    status: "Pending",
-  },
-];
+function toPurchaseTransaction(document: TransactionDocument): PurchaseTransaction {
+  return {
+    id: document.$id,
+    type: document.type === "income" ? "income" : "expense",
+    description: document.description,
+    category: document.category,
+    date: document.date,
+    amount: Number(document.amount),
+    status: document.status === "Pending" ? "Pending" : "Paid",
+  };
+}
 
 function formatDate(isoDate: string) {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day));
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  if (!match) return isoDate;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const formatted = new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day));
+  return formatted;
 }
 
 function formatMonthLabel(monthKey: string) {
@@ -108,12 +53,37 @@ const statusLabel = {
 } as const;
 
 export default function ComprasPage() {
+  const { user } = useSession();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<PurchaseTransaction | null>(null);
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("all");
   const [status, setStatus] = useState("all");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadTransactions() {
+      try {
+        const response = await getTransactions(user.$id);
+        if (!active) return;
+        setTransactions(response.documents.map(toPurchaseTransaction));
+      } catch (error) {
+        console.error("Falha ao carregar transações.", error);
+        if (active) setTransactions([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadTransactions();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
 
   const monthOptions = useMemo(() => {
     const keys = [...new Set(transactions.map((item) => item.date.slice(0, 7)))];
@@ -252,7 +222,19 @@ export default function ComprasPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredTransactions.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-zinc-400">
+                    A carregar dados...
+                  </td>
+                </tr>
+              ) : transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-gray-400">
+                    Nenhuma transação encontrada. Clique em &apos;Nova Transação&apos; para começar.
+                  </td>
+                </tr>
+              ) : filteredTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-10 text-center text-zinc-400">
                     Nenhuma transação encontrada.

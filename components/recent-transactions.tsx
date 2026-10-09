@@ -1,18 +1,19 @@
 import { Dumbbell, ShoppingCart, Utensils, Wallet, type LucideIcon } from "lucide-react";
 import type { Transaction } from "@/types/dashboard";
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
 const categoryIcons: Record<string, LucideIcon> = {
   Cart: ShoppingCart,
   Fitness: Dumbbell,
   Food: Utensils,
 };
 
-export function RecentTransactions({ transactions }: { transactions: Transaction[] }) {
+export function RecentTransactions({
+  transactions,
+  formatCurrency,
+}: {
+  transactions: Transaction[];
+  formatCurrency: (value: number) => string;
+}) {
   const pendingCount = transactions.filter((transaction) => transaction.status === "Pending").length;
   const paidCount = transactions.filter((transaction) => transaction.status === "Paid").length;
 
@@ -46,29 +47,29 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
               </tr>
             </thead>
             <tbody>
-              {transactions.map((transaction) => {
-                const CategoryIcon = categoryIcons[transaction.category] ?? Wallet;
+              {transactions.map((tx) => {
+                const CategoryIcon = categoryIcons[tx.category] ?? Wallet;
 
                 return (
-                  <tr key={transaction.id} className="border-t border-zinc-800">
-                    <td className="py-3 pr-4 text-zinc-400">{transaction.id}</td>
-                    <td className="py-3 pr-4 text-zinc-400">{transaction.date}</td>
-                    <td className="py-3 pr-4 text-zinc-100">{transaction.description}</td>
+                  <tr key={tx.id} className="border-t border-zinc-800">
+                    <td className="py-3 pr-4 text-zinc-400">{tx.id}</td>
+                    <td className="py-3 pr-4 text-zinc-400">{tx.date}</td>
+                    <td className="py-3 pr-4 text-zinc-100">{tx.description}</td>
                     <td className="py-3 pr-4">
                       <span className="inline-flex items-center gap-1.5 text-zinc-100">
                         <CategoryIcon className="size-3.5 text-zinc-400" aria-hidden="true" />
-                        {transaction.category}
+                        {tx.category}
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-right text-zinc-100">
-                      {currencyFormatter.format(transaction.amount)}
+                      {formatCurrency(tx.amount)}
                     </td>
                     <td
                       className={`py-3 text-right font-medium ${
-                        transaction.status === "Paid" ? "text-emerald-400" : "text-orange-400"
+                        tx.status === "Paid" ? "text-emerald-400" : "text-orange-400"
                       }`}
                     >
-                      {transaction.status}
+                      {tx.status}
                     </td>
                   </tr>
                 );

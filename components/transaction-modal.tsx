@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 
 const categories = [
   "Alimentação",
@@ -41,6 +41,25 @@ function parseAmount(value: string) {
   return Number.isFinite(amount) ? amount : Number.NaN;
 }
 
+function collectValidationErrors(form: HTMLFormElement) {
+  const errors: Record<string, string> = {};
+
+  for (const element of form.elements) {
+    if (
+      !(element instanceof HTMLInputElement) &&
+      !(element instanceof HTMLSelectElement) &&
+      !(element instanceof HTMLTextAreaElement)
+    ) {
+      continue;
+    }
+
+    if (!element.name || element.disabled || element.validity.valid) continue;
+    errors[element.name] = element.validationMessage || "Campo inválido.";
+  }
+
+  return errors;
+}
+
 type TransactionModalProps = {
   open: boolean;
   transaction: PurchaseTransaction | null;
@@ -73,6 +92,7 @@ function TransactionModalForm({
   const [date, setDate] = useState(transaction?.date ?? "");
   const [status, setStatus] = useState<TransactionStatus>(transaction?.status ?? "Paid");
   const [amountError, setAmountError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -83,14 +103,39 @@ function TransactionModalForm({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  function handleSaveClick(event: MouseEvent<HTMLButtonElement>) {
+    console.log("--- CLIQUE NO BOTÃO SALVAR ---");
+    event.preventDefault();
+
+    const form = event.currentTarget.form;
+    if (!form) {
+      console.error("O botão Salvar não está associado ao formulário.");
+      return;
+    }
+
+    form.requestSubmit();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    console.log("--- SUBMIT DO FORMULÁRIO ---");
+
+    const errors = collectValidationErrors(event.currentTarget);
     const parsedAmount = parseAmount(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setAmountError("Informe um valor maior que zero.");
+      errors.amount = "Informe um valor maior que zero.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      console.log("Erros de validação:", errors);
+      setAmountError(errors.amount ?? "");
+      setSubmitError(Object.values(errors).join(" "));
       return;
     }
+
+    setAmountError("");
+    setSubmitError("");
 
     onSave({
       id: transaction?.id ?? crypto.randomUUID(),
@@ -107,14 +152,16 @@ function TransactionModalForm({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      onMouseDown={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="transaction-modal-title"
         className="relative max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 md:p-8"
-        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
         <button
           type="button"
@@ -132,7 +179,12 @@ function TransactionModalForm({
           Adicione os detalhes da sua compra ou entrada
         </p>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <form
+          id="transaction-form"
+          noValidate
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-6 md:grid-cols-2"
+        >
           <fieldset className="col-span-1 md:col-span-2">
             <legend className="mb-3 text-sm font-medium text-zinc-300">Tipo de Transação</legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -169,6 +221,7 @@ function TransactionModalForm({
               <span className="text-xl font-medium text-zinc-500">R$</span>
               <input
                 type="text"
+                name="amount"
                 inputMode="decimal"
                 value={amount}
                 onChange={(event) => {
@@ -188,6 +241,7 @@ function TransactionModalForm({
             <span className="text-sm font-medium text-zinc-300">Data da Transação</span>
             <input
               type="date"
+              name="date"
               value={date}
               onChange={(event) => setDate(event.target.value)}
               required
@@ -199,6 +253,7 @@ function TransactionModalForm({
             <span className="text-sm font-medium text-zinc-300">Descrição</span>
             <input
               type="text"
+              name="description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Mercado da semana"
@@ -210,6 +265,7 @@ function TransactionModalForm({
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">Categoria</span>
             <select
+              name="category"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
               required
@@ -257,8 +313,16 @@ function TransactionModalForm({
             </div>
           </fieldset>
 
+          {submitError ? (
+            <p className="col-span-1 text-sm text-red-400 md:col-span-2" role="alert">
+              {submitError}
+            </p>
+          ) : null}
+
           <button
             type="submit"
+            form="transaction-form"
+            onClick={handleSaveClick}
             className="col-span-1 h-14 w-full rounded-xl bg-emerald-600 text-base font-semibold tracking-wide text-white transition-colors duration-200 hover:bg-emerald-500 md:col-span-2"
           >
             Salvar Transação

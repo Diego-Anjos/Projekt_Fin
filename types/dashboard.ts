@@ -1,12 +1,14 @@
-export interface PortfolioKPIs {
+export interface DashboardKpis {
   totalWealth: number;
-  wealthChangePercent: number;
+  wealthGrowth: string;
   monthlyCashFlow: number;
-  allocation: {
-    type: string;
-    percentage: number;
-    color: string;
-  }[];
+}
+
+export interface Allocation {
+  id: number;
+  label: string;
+  percentage: number;
+  color: string;
 }
 
 export interface Transaction {

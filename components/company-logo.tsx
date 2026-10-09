@@ -1,31 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const getServiceDomain = (serviceName: string) => {
+  const name = serviceName.toLowerCase().trim();
+
+  const domainMap: Record<string, string> = {
+    netflix: "netflix.com",
+    spotify: "spotify.com",
+    amazon: "amazon.com",
+    "amazon prime": "amazon.com",
+    "prime video": "primevideo.com",
+    crunchyroll: "crunchyroll.com",
+    disney: "disneyplus.com",
+    "disney+": "disneyplus.com",
+    hbo: "hbomax.com",
+    max: "max.com",
+    "apple tv": "tv.apple.com",
+    "apple music": "music.apple.com",
+    youtube: "youtube.com",
+    "youtube premium": "youtube.com",
+    gympass: "wellhub.com",
+    wellhub: "wellhub.com",
+    "smart fit": "smartfit.com.br",
+    chatgpt: "openai.com",
+    github: "github.com",
+    adobe: "adobe.com",
+    microsoft: "microsoft.com",
+  };
+
+  return domainMap[name] || `${name.replace(/\s+/g, "")}.com`;
+};
+
+function logoUrl(name: string) {
+  const domain = getServiceDomain(name);
+  return `https://logo.clearbit.com/${domain}`;
+}
+
+function initialsAvatarUrl(name: string) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=059669&color=fff&size=128`;
+}
 
 export function CompanyLogo({ name }: { name: string }) {
-  const [hasError, setHasError] = useState(false);
+  const srcUrl = logoUrl(name);
+  const [src, setSrc] = useState(srcUrl);
 
-  // Adivinha o domínio removendo espaços (ex: "Netflix" -> "netflix.com")
-  const domain = name.toLowerCase().replace(/\s+/g, "") + ".com";
-
-  // Usando a API do Google que é mais estável e não sofre tantos bloqueios de CORS
-  const logoUrl = `https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128`;
-
-  if (hasError) {
-    return (
-      <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-200 font-bold text-sm border border-zinc-700">
-        {name.charAt(0).toUpperCase()}
-      </div>
-    );
-  }
+  useEffect(() => {
+    setSrc(srcUrl);
+  }, [srcUrl]);
 
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
-      src={logoUrl}
+      src={src}
       alt={name}
-      className="w-10 h-10 rounded-full object-cover bg-zinc-900 border border-zinc-800"
-      onError={() => setHasError(true)}
+      className="h-10 w-10 rounded-full border border-zinc-800 bg-zinc-900 object-cover"
+      onError={(event) => {
+        event.currentTarget.onerror = null;
+        setSrc(initialsAvatarUrl(name));
+      }}
     />
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { CompanyLogo } from "@/components/company-logo";
+import { useSession } from "@/components/require-session";
 import { SubscriptionModal, type ServiceSubscription } from "@/components/subscription-modal";
+import { getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
 import { Layers, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -21,47 +23,58 @@ const paymentLabel = {
   boleto: "Boleto",
 } as const;
 
-const initialSubscriptions: ServiceSubscription[] = [
-  {
-    id: "netflix",
-    name: "Netflix",
-    amount: 55.9,
-    cycle: "monthly",
-    subscribedAt: "2024-10-12",
-    nextDue: "2026-10-12",
-    payment: "credit",
+function toServiceSubscription(document: SubscriptionDocument): ServiceSubscription {
+  return {
+    id: document.$id,
+    name: document.name,
+    amount: Number(document.amount),
+    cycle: document.cycle === "yearly" ? "yearly" : "monthly",
+    subscribedAt: document.subscribedAt,
+    nextDue: document.nextDue,
+    payment:
+      document.payment === "pix" || document.payment === "boleto" ? document.payment : "credit",
     status: "active",
-  },
-  {
-    id: "spotify",
-    name: "Spotify",
-    amount: 21.9,
-    cycle: "monthly",
-    subscribedAt: "2025-03-18",
-    nextDue: "2026-10-18",
-    payment: "pix",
-    status: "active",
-  },
-  {
-    id: "prime",
-    name: "Amazon Prime",
-    amount: 178.8,
-    cycle: "yearly",
-    subscribedAt: "2025-11-02",
-    nextDue: "2026-11-02",
-    payment: "credit",
-    status: "active",
-  },
-];
+  };
+}
 
 function formatDate(isoDate: string) {
-  const [year, month, day] = isoDate.split("-").map(Number);
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  if (!match) return isoDate;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
   return new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day));
 }
 
 export default function SubscriptionsPage() {
+  const { user } = useSession();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
+  const [subscriptions, setSubscriptions] = useState<ServiceSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSubscriptions() {
+      try {
+        const response = await getSubscriptions(user.$id);
+        if (!active) return;
+        setSubscriptions(response.documents.map(toServiceSubscription));
+      } catch (error) {
+        console.error("Falha ao carregar assinaturas.", error);
+        if (active) setSubscriptions([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadSubscriptions();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
 
   function handleSave(subscription: ServiceSubscription) {
     setSubscriptions((current) => [subscription, ...current]);
@@ -93,10 +106,13 @@ export default function SubscriptionsPage() {
         </button>
       </header>
 
-      {subscriptions.length === 0 ? (
-        <p className="rounded-xl border border-zinc-700/50 bg-black px-5 py-10 text-center text-sm text-zinc-400">
-          Nenhuma assinatura cadastrada.
-        </p>
+      {loading ? (
+        <p className="w-full py-12 text-center text-zinc-400">A carregar dados...</p>
+      ) : subscriptions.length === 0 ? (
+        <div className="w-full py-12 text-center text-gray-400">
+          Nenhuma assinatura recorrente encontrada. Clique em &apos;Nova Assinatura&apos; para
+          registar os seus serviços.
+        </div>
       ) : (
         <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {subscriptions.map((subscription) => (

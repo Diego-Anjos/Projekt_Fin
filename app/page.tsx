@@ -1,9 +1,12 @@
 "use client";
 
+import { ID } from "appwrite";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AmbientBackground } from "@/components/AmbientBackground";
+import { account } from "@/lib/appwrite/client";
 
 const Logo3D = dynamic(() => import("@/components/Logo3D"), { ssr: false });
 
@@ -34,14 +37,61 @@ function GoogleIcon() {
 }
 
 export default function LoginPage() {
+  const [isSignUp, setIsSignUp] = useState(false);
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let active = true;
+
+    async function checkSession() {
+      try {
+        await account.get();
+        if (active) {
+          router.push("/dashboard");
+        }
+      } catch {
+        // Utilizador não está logado, permanece na página
+      }
+    }
+
+    void checkSession();
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    router.push("/dashboard");
+    setError("");
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        await account.create(ID.unique(), email, password, name);
+        await account.createEmailPasswordSession(email, password);
+      } else {
+        await account.createEmailPasswordSession(email, password);
+      }
+
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "";
+
+      if (message.includes("session is active")) {
+        router.push("/dashboard");
+      } else {
+        setError(message || "Invalid credentials. Please check the email and password.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -53,7 +103,7 @@ export default function LoginPage() {
 
         <blockquote className="absolute inset-x-0 bottom-0 z-10 max-w-lg bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent px-12 pt-20 pb-12">
           <p className="text-lg leading-relaxed font-medium text-white">
-            “O controle financeiro inteligente para a sua vida.”
+            “Smart expense tracking for your everyday life.”
           </p>
           <footer className="mt-3 text-sm text-slate-400">— Projekt Fin</footer>
         </blockquote>
@@ -67,14 +117,44 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex h-full w-full justify-center overflow-y-auto px-6">
         <div className="relative z-10 my-auto w-full max-w-md py-10">
-          <h1 className="text-3xl font-bold tracking-tight text-white">
-            Bem-vindo ao Projekt Fin
-          </h1>
-          <p className="mt-2 text-slate-400">
-            Construa o seu futuro financeiro sem esforço.
-          </p>
+          <div className="mb-10 flex w-full justify-center">
+            <Image
+              src="/Logotipo Projekt Fin em fundo transparente.png"
+              alt="Logotipo Projekt Fin"
+              width={220}
+              height={110}
+              priority
+              className="object-contain"
+            />
+          </div>
+          <div className="mb-10 flex w-full flex-col items-center text-center">
+            <h1 className="text-3xl font-bold tracking-tight text-white">
+              {isSignUp ? "Create an account" : "Welcome to Projekt Fin"}
+            </h1>
+            <p className="mt-2 text-slate-400">
+              {isSignUp
+                ? "Start managing your finances today."
+                : "Track your expenses and take control of your money."}
+            </p>
+          </div>
 
-          <form className="mt-10 space-y-5" onSubmit={handleLogin}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {isSignUp && (
+              <label className="block space-y-2">
+                <span className="text-sm text-slate-300">Name</span>
+                <input
+                  type="text"
+                  name="name"
+                  autoComplete="name"
+                  required
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Your full name"
+                  className={fieldClassName}
+                />
+              </label>
+            )}
+
             <label className="block space-y-2">
               <span className="text-sm text-slate-300">Email</span>
               <input
@@ -84,17 +164,17 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="seu@email.com"
+                placeholder="you@example.com"
                 className={fieldClassName}
               />
             </label>
 
             <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Senha</span>
+              <span className="text-sm text-slate-300">Password</span>
               <input
                 type="password"
                 name="password"
-                autoComplete="current-password"
+                autoComplete={isSignUp ? "new-password" : "current-password"}
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -103,41 +183,48 @@ export default function LoginPage() {
               />
             </label>
 
-            <div className="flex items-center justify-between gap-4">
-              <label className="inline-flex cursor-pointer items-center gap-3">
-                <span className="relative inline-flex">
-                  <input
-                    type="checkbox"
-                    name="remember"
-                    checked={remember}
-                    onChange={(event) => setRemember(event.target.checked)}
-                    className="peer sr-only"
-                  />
-                  <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
-                  <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
-                </span>
-                <span className="text-sm text-slate-300">Lembrar-me</span>
-              </label>
+            {!isSignUp && (
+              <div className="flex items-center justify-between gap-4">
+                <label className="inline-flex cursor-pointer items-center gap-3">
+                  <span className="relative inline-flex">
+                    <input
+                      type="checkbox"
+                      name="remember"
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                      className="peer sr-only"
+                    />
+                    <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
+                    <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
+                  </span>
+                  <span className="text-sm text-slate-300">Remember me</span>
+                </label>
 
-              <a
-                href="#esqueci-senha"
-                className="text-sm text-emerald-400 transition hover:text-emerald-300"
-              >
-                Esqueci minha senha?
-              </a>
-            </div>
+                <a
+                  href="#esqueci-senha"
+                  className="text-sm text-emerald-400 transition hover:text-emerald-300"
+                >
+                  Forgot password?
+                </a>
+              </div>
+            )}
+
+            {error && (
+              <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
+            )}
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+              disabled={loading}
+              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Entrar
+              {loading ? "Processing..." : isSignUp ? "Sign up" : "Sign in"}
             </button>
           </form>
 
           <div className="my-8 flex items-center gap-3">
             <div className="h-px flex-1 bg-slate-800" />
-            <span className="text-xs tracking-[0.18em] text-slate-500">OU</span>
+            <span className="text-xs tracking-[0.18em] text-slate-500">OR</span>
             <div className="h-px flex-1 bg-slate-800" />
           </div>
 
@@ -146,17 +233,21 @@ export default function LoginPage() {
             className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
           >
             <GoogleIcon />
-            Continuar com Google
+            Continue with Google
           </button>
 
           <p className="mt-8 text-center text-sm text-slate-400">
-            Não tem uma conta?{" "}
-            <a
-              href="#cadastro"
-              className="font-medium text-emerald-400 transition hover:text-emerald-300"
+            {isSignUp ? "Already have an account? " : "Don't have an account? "}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp((current) => !current);
+                setError("");
+              }}
+              className="cursor-pointer font-medium text-emerald-400 transition hover:text-emerald-300"
             >
-              Cadastre-se
-            </a>
+              {isSignUp ? "Sign in" : "Sign up"}
+            </button>
           </p>
         </div>
         </div>

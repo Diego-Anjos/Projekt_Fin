@@ -15,6 +15,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "@/components/require-session";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const navItems: { labelKey: string; href: string; icon: LucideIcon }[] = [
@@ -27,9 +28,23 @@ const navItems: { labelKey: string; href: string; icon: LucideIcon }[] = [
   { labelKey: "sidebar.settings", href: "/settings", icon: Settings },
 ];
 
+function getInitials(name: string, email: string) {
+  const source = name.trim() || email;
+  const parts = source.split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+
+  return source.slice(0, 2).toUpperCase();
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  const { user } = useSession();
+  const displayName = user.name.trim() || user.email;
+  const initials = getInitials(user.name, user.email);
 
   return (
     <aside
@@ -55,10 +70,10 @@ export function Sidebar() {
           className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white"
           aria-hidden="true"
         >
-          EM
+          {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-zinc-100">Ethan Miller</p>
+          <p className="truncate text-sm font-medium text-zinc-100">{displayName}</p>
           <p className="text-xs text-zinc-400">Active</p>
         </div>
         <button

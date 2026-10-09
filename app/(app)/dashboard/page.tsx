@@ -1,21 +1,21 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { DashboardSessionBar } from "@/components/dashboard-session-bar";
 import { MarketHubCards } from "@/components/market-hub-cards";
 import { NewsTickerCard } from "@/components/NewsTickerCard";
 import { PortfolioKPIs } from "@/components/portfolio-kpis";
 import { PortfolioPerformance } from "@/components/portfolio-performance";
+import { useSession } from "@/components/require-session";
 import { RecentTransactions } from "@/components/recent-transactions";
 import { RecurringSubscriptions } from "@/components/recurring-subscriptions";
-import type { PerformanceData, PortfolioKPIs as PortfolioKpiData, Subscription, Transaction } from "@/types/dashboard";
-
-const portfolioKpis: PortfolioKpiData = {
-  totalWealth: 130500,
-  wealthChangePercent: 1.8,
-  monthlyCashFlow: 4100,
-  allocation: [
-    { type: "Ações", percentage: 35, color: "#065f46" },
-    { type: "Renda Fixa", percentage: 40, color: "#10b981" },
-    { type: "Outros", percentage: 25, color: "#71717a" },
-  ],
-};
+import {
+  getSubscriptions,
+  getTransactions,
+  type SubscriptionDocument,
+  type TransactionDocument,
+} from "@/lib/appwrite/database";
+import type { Allocation, DashboardKpis, PerformanceData, Subscription, Transaction } from "@/types/dashboard";
 
 const performanceData: PerformanceData = [
   { month: "Jan", value: 109200 },
@@ -44,57 +44,6 @@ const performanceData: PerformanceData = [
   { month: "", value: 130500 },
 ];
 
-const transactions: Transaction[] = [
-  {
-    id: "#4821",
-    date: "05 Out",
-    description: "Compra no mercado",
-    category: "Cart",
-    amount: 186.4,
-    status: "Paid",
-  },
-  {
-    id: "#4820",
-    date: "04 Out",
-    description: "Mensalidade da academia",
-    category: "Fitness",
-    amount: 129.9,
-    status: "Pending",
-  },
-  {
-    id: "#4818",
-    date: "02 Out",
-    description: "Almoço de trabalho",
-    category: "Food",
-    amount: 64,
-    status: "Paid",
-  },
-];
-
-const subscriptions: Subscription[] = [
-  {
-    id: "netflix",
-    name: "Netflix",
-    date: "Today, 07:08",
-    amount: 55.9,
-    renewalDate: "Renova 12 Out",
-  },
-  {
-    id: "spotify",
-    name: "Spotify",
-    date: "Today, 09:14",
-    amount: 21.9,
-    renewalDate: "Renova 18 Out",
-  },
-  {
-    id: "academia",
-    name: "Academia",
-    date: "Today, 18:02",
-    amount: 129.9,
-    renewalDate: "Renova 02 Nov",
-  },
-];
-
 const contributionLevels = [
   [0, 1, 2, 1, 3, 2, 0, 1, 2, 3, 1, 0, 2, 1, 3, 2, 0, 1],
   [1, 2, 0, 3, 1, 2, 3, 0, 1, 2, 3, 2, 1, 0, 2, 3, 1, 2],
@@ -104,9 +53,118 @@ const contributionLevels = [
 
 const contributionTones = ["bg-zinc-800", "bg-emerald-800", "bg-emerald-600", "bg-emerald-400"];
 
+function formatDashboardDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = new Intl.DateTimeFormat("pt-BR", { month: "short" })
+    .format(date)
+    .replace(".", "");
+
+  return `${day} ${month.charAt(0).toUpperCase()}${month.slice(1)}`;
+}
+
+function toDashboardTransaction(document: TransactionDocument): Transaction {
+  return {
+    id: document.$id,
+    date: formatDashboardDate(document.date),
+    description: document.description,
+    category: document.category,
+    amount: document.amount,
+    status: document.status === "Paid" ? "Paid" : "Pending",
+  };
+}
+
+function toDashboardSubscription(document: SubscriptionDocument): Subscription {
+  return {
+    id: document.$id,
+    name: document.name,
+    date: formatDashboardDate(document.subscribedAt),
+    amount: document.amount,
+    renewalDate: `Renova ${formatDashboardDate(document.nextDue)}`,
+  };
+}
+
+function computeCashKpis(documents: TransactionDocument[]) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  let totalWealth = 0;
+  let monthlyCashFlow = 0;
+
+  for (const document of documents) {
+    const signed = document.type === "income" ? document.amount : -document.amount;
+    totalWealth += signed;
+
+    const match = /^(\d{4})-(\d{2})/.exec(document.date);
+    const documentYear = match ? Number(match[1]) : new Date(document.date).getFullYear();
+    const documentMonth = match ? Number(match[2]) : new Date(document.date).getMonth() + 1;
+
+    if (documentYear === year && documentMonth === month) {
+      monthlyCashFlow += signed;
+    }
+  }
+
+  return { totalWealth, monthlyCashFlow };
+}
+
 export default function Home() {
+  const { user } = useSession();
+  const [kpis, setKpis] = useState<DashboardKpis>({
+    totalWealth: 0,
+    wealthGrowth: "0%",
+    monthlyCashFlow: 0,
+  });
+
+  const [allocations, setAllocations] = useState<Allocation[]>([
+    { id: 1, label: "Ações", percentage: 35, color: "bg-emerald-500" },
+    { id: 2, label: "Renda Fixa", percentage: 40, color: "bg-emerald-300" },
+    { id: 3, label: "Outros", percentage: 25, color: "bg-gray-400" },
+  ]);
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadFinance() {
+      try {
+        const [transactionsResponse, subscriptionsResponse] = await Promise.all([
+          getTransactions(user.$id),
+          getSubscriptions(user.$id),
+        ]);
+
+        if (!active) return;
+
+        setTransactions(transactionsResponse.documents.map(toDashboardTransaction));
+        setSubscriptions(subscriptionsResponse.documents.map(toDashboardSubscription));
+        setKpis((current) => ({
+          ...current,
+          ...computeCashKpis(transactionsResponse.documents),
+        }));
+      } catch (error) {
+        console.error("Falha ao carregar dados do Appwrite.", error);
+      }
+    }
+
+    void loadFinance();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  };
+
   return (
     <div className="flex min-h-full flex-col gap-8 p-6">
+      <DashboardSessionBar />
+
       <section aria-labelledby="market-hub-heading">
         <MarketHubCards news={<NewsTickerCard />} />
       </section>
@@ -115,7 +173,7 @@ export default function Home() {
         <h2 id="portfolio-kpis-heading" className="text-base font-semibold text-zinc-100">
           Portfolio KPIs
         </h2>
-        <PortfolioKPIs {...portfolioKpis} />
+        <PortfolioKPIs kpis={kpis} allocations={allocations} formatCurrency={formatCurrency} />
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <PortfolioPerformance data={performanceData} />
           <TradesHeatmap />
@@ -123,8 +181,8 @@ export default function Home() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <RecentTransactions transactions={transactions} />
-        <RecurringSubscriptions subscriptions={subscriptions} />
+        <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
+        <RecurringSubscriptions subscriptions={subscriptions} formatCurrency={formatCurrency} />
       </section>
     </div>
   );

@@ -2,12 +2,13 @@ import { CompanyLogo } from "@/components/company-logo";
 import type { Subscription } from "@/types/dashboard";
 import Link from "next/link";
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
-export function RecurringSubscriptions({ subscriptions }: { subscriptions: Subscription[] }) {
+export function RecurringSubscriptions({
+  subscriptions,
+  formatCurrency,
+}: {
+  subscriptions: Subscription[];
+  formatCurrency: (value: number) => string;
+}) {
   return (
     <article id="subscriptions" className="rounded-xl border border-zinc-700/50 bg-black p-4">
       <div className="flex items-center justify-between gap-3">
@@ -32,7 +33,7 @@ export function RecurringSubscriptions({ subscriptions }: { subscriptions: Subsc
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-zinc-100">
-                  {currencyFormatter.format(item.amount)}
+                  {formatCurrency(item.amount)}
                 </p>
                 <p className="text-xs text-zinc-400">{item.renewalDate}</p>
               </div>
