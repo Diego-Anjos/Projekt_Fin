@@ -1,7 +1,17 @@
 "use client";
 
+import { useSession } from "@/components/require-session";
+import { getAllTransactions, type TransactionDocument } from "@/lib/appwrite/database";
+import {
+  expenseCategories,
+  monthOptions,
+  monthValue,
+  sixMonthSeries,
+  sumByType,
+  type CashTransaction,
+} from "@/lib/cash-flow";
 import { ArrowDown, ArrowUp, Scale } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -14,19 +24,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-type CategoryExpense = {
-  name: string;
-  value: number;
-  color: string;
-};
-
-type MonthSnapshot = {
-  key: string;
-  income: number;
-  expense: number;
-  categories: CategoryExpense[];
-};
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -42,100 +39,18 @@ const percentFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 0,
 });
 
-const CATEGORY_COLORS = {
+const CATEGORY_COLORS: Record<string, string> = {
   Moradia: "#10b981",
   Alimentação: "#3b82f6",
   Lazer: "#a855f7",
   Transporte: "#f97316",
   Assinaturas: "#ef4444",
-} as const;
+  Saúde: "#14b8a6",
+  Salário: "#eab308",
+  Outros: "#71717a",
+};
 
-const months: MonthSnapshot[] = [
-  {
-    key: "2026-04",
-    income: 6900,
-    expense: 7500,
-    categories: [
-      { name: "Moradia", value: 2250, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1875, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1500, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 1125, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 750, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-05",
-    income: 7400,
-    expense: 6800,
-    categories: [
-      { name: "Moradia", value: 2176, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1496, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1224, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 1088, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 816, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-06",
-    income: 7800,
-    expense: 5400,
-    categories: [
-      { name: "Moradia", value: 1890, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1350, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 810, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 756, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 594, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-07",
-    income: 8100,
-    expense: 6900,
-    categories: [
-      { name: "Moradia", value: 2070, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1725, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1380, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 1035, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 690, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-08",
-    income: 7600,
-    expense: 5800,
-    categories: [
-      { name: "Moradia", value: 1856, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1392, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1044, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 870, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 638, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-09",
-    income: 8300,
-    expense: 6400,
-    categories: [
-      { name: "Moradia", value: 1920, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1600, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1280, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 960, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 640, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-  {
-    key: "2026-10",
-    income: 8500,
-    expense: 6200,
-    categories: [
-      { name: "Moradia", value: 1860, color: CATEGORY_COLORS.Moradia },
-      { name: "Alimentação", value: 1550, color: CATEGORY_COLORS.Alimentação },
-      { name: "Lazer", value: 1240, color: CATEGORY_COLORS.Lazer },
-      { name: "Transporte", value: 930, color: CATEGORY_COLORS.Transporte },
-      { name: "Assinaturas", value: 620, color: CATEGORY_COLORS.Assinaturas },
-    ],
-  },
-];
+const EXTRA_COLORS = ["#22d3ee", "#f472b6", "#818cf8", "#84cc16", "#fb923c"];
 
 const tooltipStyle = {
   backgroundColor: "#18181b",
@@ -144,21 +59,20 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-function formatMonthYear(monthKey: string) {
-  const [year, month] = monthKey.split("-").map(Number);
+function toCashTransaction(document: TransactionDocument): CashTransaction {
+  return {
+    type: document.type === "income" ? "income" : "expense",
+    category: document.category ?? "",
+    date: document.date,
+    amount: Number(document.amount),
+  };
+}
+
+function formatMonthYear(year: number, month: number) {
   const label = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",
-  }).format(new Date(year, month - 1, 1));
-
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function formatShortMonth(monthKey: string) {
-  const [year, month] = monthKey.split("-").map(Number);
-  const label = new Intl.DateTimeFormat("pt-BR", { month: "short" })
-    .format(new Date(year, month - 1, 1))
-    .replace(".", "");
+  }).format(new Date(year, month, 1));
 
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
@@ -170,37 +84,95 @@ function formatSignedCurrency(value: number) {
   return formatted;
 }
 
-export default function CashFlowPage() {
-  const [selectedMonth, setSelectedMonth] = useState("2026-10");
+function categoryColor(name: string, index: number) {
+  return CATEGORY_COLORS[name] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
+}
 
-  const selectedIndex = Math.max(
-    0,
-    months.findIndex((month) => month.key === selectedMonth),
+export default function CashFlowPage() {
+  const { user } = useSession();
+  const [today] = useState(() => new Date());
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth());
+  const [transactions, setTransactions] = useState<CashTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadTransactions() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const documents = await getAllTransactions(user.$id);
+        if (!active) return;
+        setTransactions(documents.map(toCashTransaction));
+      } catch (caught) {
+        console.error("Falha ao carregar o fluxo de caixa.", caught);
+        if (!active) return;
+        setTransactions([]);
+        setError("Não foi possível carregar as transações.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadTransactions();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
+
+  const options = useMemo(() => monthOptions(transactions, today), [transactions, today]);
+
+  const income = useMemo(
+    () => sumByType(transactions, year, month, "income"),
+    [transactions, year, month],
   );
-  const selected = months[selectedIndex];
-  const balance = selected.income - selected.expense;
-  const balanceTone = balance >= 0 ? "text-emerald-500" : "text-red-500";
-  const balanceIconTone =
-    balance >= 0 ? "bg-emerald-500/15 text-emerald-500" : "bg-red-500/15 text-red-500";
+  const expense = useMemo(
+    () => sumByType(transactions, year, month, "expense"),
+    [transactions, year, month],
+  );
+  const balance = useMemo(() => {
+    const net = Math.round((income - expense) * 100) / 100;
+    return Object.is(net, -0) ? 0 : net;
+  }, [income, expense]);
 
   const barData = useMemo(
-    () =>
-      months.slice(Math.max(0, selectedIndex - 5), selectedIndex + 1).map((month) => ({
-        month: formatShortMonth(month.key),
-        entrada: month.income,
-        saida: month.expense,
-      })),
-    [selectedIndex],
+    () => sixMonthSeries(transactions, year, month),
+    [transactions, year, month],
   );
-
   const pieData = useMemo(
     () =>
-      selected.categories.map((category) => ({
+      expenseCategories(transactions, year, month).map((category, index) => ({
         ...category,
-        percent: selected.expense > 0 ? (category.value / selected.expense) * 100 : 0,
+        color: categoryColor(category.name, index),
       })),
-    [selected],
+    [transactions, year, month],
   );
+
+  const balanceTone =
+    balance > 0 ? "text-emerald-400" : balance < 0 ? "text-rose-400" : "text-zinc-100";
+  const balanceIconTone =
+    balance > 0
+      ? "bg-emerald-500/15 text-emerald-400"
+      : balance < 0
+        ? "bg-rose-500/15 text-rose-400"
+        : "bg-zinc-800 text-zinc-400";
+
+  function selectMonth(value: string) {
+    const [nextYear, nextMonth] = value.split("-").map(Number);
+    if (!Number.isInteger(nextYear) || !Number.isInteger(nextMonth)) return;
+    setYear(nextYear);
+    setMonth(nextMonth);
+  }
+
+  const selectedValue = monthValue({ year, month });
+  const monthChoices = options.some((option) => monthValue(option) === selectedValue)
+    ? options
+    : [{ year, month }, ...options];
 
   return (
     <div className="flex w-full flex-col gap-6 px-6 py-8">
@@ -216,21 +188,23 @@ export default function CashFlowPage() {
         <label className="flex shrink-0 flex-col gap-1.5 text-xs font-medium text-emerald-100/70">
           Mês
           <select
-            value={selected.key}
-            onChange={(event) => setSelectedMonth(event.target.value)}
+            value={selectedValue}
+            onChange={(event) => selectMonth(event.target.value)}
             aria-label="Selecionar mês e ano"
             className="h-11 min-w-44 rounded-lg border border-emerald-800/50 bg-[#041610] px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
           >
-            {months.map((month) => (
-              <option key={month.key} value={month.key}>
-                {formatMonthYear(month.key)}
+            {monthChoices.map((option) => (
+              <option key={monthValue(option)} value={monthValue(option)}>
+                {formatMonthYear(option.year, option.month)}
               </option>
             ))}
           </select>
         </label>
       </header>
 
-      <section aria-label="Resumo mensal" className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+
+      <section aria-label="Resumo mensal" aria-busy={loading} className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -241,9 +215,13 @@ export default function CashFlowPage() {
               <ArrowUp className="size-5" aria-hidden="true" />
             </span>
           </div>
-          <p className="mt-4 text-2xl font-semibold tracking-tight text-emerald-500">
-            {currencyFormatter.format(selected.income)}
-          </p>
+          {loading ? (
+            <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
+          ) : (
+            <p className="mt-4 text-2xl font-semibold tracking-tight text-emerald-500">
+              {currencyFormatter.format(income)}
+            </p>
+          )}
         </article>
 
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
@@ -256,23 +234,29 @@ export default function CashFlowPage() {
               <ArrowDown className="size-5" aria-hidden="true" />
             </span>
           </div>
-          <p className="mt-4 text-2xl font-semibold tracking-tight text-red-500">
-            {currencyFormatter.format(selected.expense)}
-          </p>
+          {loading ? (
+            <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
+          ) : (
+            <p className="mt-4 text-2xl font-semibold tracking-tight text-red-500">
+              {currencyFormatter.format(expense)}
+            </p>
+          )}
         </article>
 
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-zinc-400">Saldo Líquido</p>
-            <span
-              className={`flex size-10 items-center justify-center rounded-lg ${balanceIconTone}`}
-            >
+            <span className={`flex size-10 items-center justify-center rounded-lg ${balanceIconTone}`}>
               <Scale className="size-5" aria-hidden="true" />
             </span>
           </div>
-          <p className={`mt-4 text-2xl font-semibold tracking-tight ${balanceTone}`}>
-            {formatSignedCurrency(balance)}
-          </p>
+          {loading ? (
+            <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
+          ) : (
+            <p className={`mt-4 text-2xl font-semibold tracking-tight ${balanceTone}`}>
+              {formatSignedCurrency(balance)}
+            </p>
+          )}
         </article>
       </section>
 
@@ -293,93 +277,105 @@ export default function CashFlowPage() {
               </li>
             </ul>
           </div>
-          <div className="mt-4 h-72" role="img" aria-label="Gráfico de barras de entradas e saídas dos últimos meses">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={4}>
-                <CartesianGrid vertical={false} stroke="#27272a" />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#a1a1aa", fontSize: 12 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#a1a1aa", fontSize: 12 }}
-                  width={48}
-                  tickFormatter={(value: number) => axisFormatter.format(value)}
-                />
-                <Tooltip
-                  cursor={{ fill: "#27272a" }}
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: "#a1a1aa" }}
-                  formatter={(value, name) => [
-                    currencyFormatter.format(Number(value)),
-                    name === "entrada" ? "Entrada" : "Saída",
-                  ]}
-                />
-                <Bar dataKey="entrada" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Bar dataKey="saida" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {loading ? (
+            <div className="mt-4 h-72 animate-pulse rounded-lg bg-zinc-900" />
+          ) : (
+            <div className="mt-4 h-72" role="img" aria-label="Gráfico de barras de entradas e saídas dos últimos meses">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={4}>
+                  <CartesianGrid vertical={false} stroke="#27272a" />
+                  <XAxis
+                    dataKey="mes"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#a1a1aa", fontSize: 12 }}
+                    dy={8}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#a1a1aa", fontSize: 12 }}
+                    width={48}
+                    tickFormatter={(value: number) => axisFormatter.format(value)}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#27272a" }}
+                    contentStyle={tooltipStyle}
+                    labelStyle={{ color: "#a1a1aa" }}
+                    formatter={(value, name) => [
+                      currencyFormatter.format(Number(value)),
+                      String(name),
+                    ]}
+                  />
+                  <Bar dataKey="Entrada" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="Saída" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </article>
 
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <h2 className="text-base font-semibold text-zinc-100">
             Despesas por Categoria (Neste mês)
           </h2>
-          <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
-            <div
-              className="h-64 w-full sm:w-1/2"
-              role="img"
-              aria-label="Gráfico de pizza das despesas por categoria neste mês"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={58}
-                    outerRadius={88}
-                    paddingAngle={3}
-                    stroke="#18181b"
-                  >
-                    {pieData.map((slice) => (
-                      <Cell key={slice.name} fill={slice.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    itemStyle={{ color: "#f4f4f5" }}
-                    formatter={(value, name) => [currencyFormatter.format(Number(value)), String(name)]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="flex w-full flex-col gap-3 sm:w-1/2">
-              {pieData.map((slice) => (
-                <li key={slice.name} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: slice.color }}
-                      aria-hidden="true"
+          {loading ? (
+            <div className="mt-4 h-64 animate-pulse rounded-lg bg-zinc-900" />
+          ) : pieData.length === 0 ? (
+            <p className="mt-4 flex h-64 items-center justify-center text-center text-sm text-zinc-400">
+              Nenhuma despesa registrada neste mês
+            </p>
+          ) : (
+            <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
+              <div
+                className="h-64 w-full sm:w-1/2"
+                role="img"
+                aria-label="Gráfico de pizza das despesas por categoria neste mês"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={58}
+                      outerRadius={88}
+                      paddingAngle={3}
+                      stroke="#18181b"
+                    >
+                      {pieData.map((slice) => (
+                        <Cell key={slice.name} fill={slice.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      itemStyle={{ color: "#f4f4f5" }}
+                      formatter={(value, name) => [currencyFormatter.format(Number(value)), String(name)]}
                     />
-                    <span className="truncate text-zinc-200">{slice.name}</span>
-                  </span>
-                  <span className="shrink-0 font-medium text-zinc-400">
-                    {percentFormatter.format(slice.percent)}%
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="flex w-full flex-col gap-3 sm:w-1/2">
+                {pieData.map((slice) => (
+                  <li key={slice.name} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: slice.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate text-zinc-200">{slice.name}</span>
+                    </span>
+                    <span className="shrink-0 font-medium text-zinc-400">
+                      {percentFormatter.format(slice.percent)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </article>
       </section>
     </div>

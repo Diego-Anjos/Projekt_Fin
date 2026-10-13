@@ -9,6 +9,7 @@ type MarketSnapshot = {
   bitcoin: { buy: number; variation: number };
   ibovespa: { points: number; variation: number };
   selic: { rate: number };
+  cdi: { rate: number };
 };
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -44,7 +45,9 @@ function isMarketSnapshot(value: unknown): value is MarketSnapshot {
     typeof data.ibovespa?.variation === "number" &&
     Number.isFinite(data.ibovespa.variation) &&
     typeof data.selic?.rate === "number" &&
-    Number.isFinite(data.selic.rate)
+    Number.isFinite(data.selic.rate) &&
+    typeof data.cdi?.rate === "number" &&
+    Number.isFinite(data.cdi.rate)
   );
 }
 
@@ -156,10 +159,30 @@ export function MarketHubCards({ news }: { news: ReactNode }) {
             </article>
 
             <article className="flex h-20 items-center justify-between gap-3 rounded-xl border border-zinc-700/50 bg-black px-3">
-              <p className="text-xs font-medium text-zinc-400">Selic</p>
-              <p className="text-sm font-semibold tracking-tight text-zinc-100">
-                {rateFormatter.format(market.selic.rate)}%
-              </p>
+              <div className="w-full min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-400">Juros & Renda Fixa</span>
+                  <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                    a.a.
+                  </span>
+                </div>
+
+                <div className="mt-1 flex items-center justify-between">
+                  <div>
+                    <span className="block text-[11px] text-slate-500">Selic Meta</span>
+                    <span className="text-lg font-bold tracking-tight text-white">
+                      {rateFormatter.format(market.selic.rate)}%
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="block text-[11px] text-slate-500">CDI / Juros</span>
+                    <span className="text-lg font-bold tracking-tight text-emerald-400">
+                      {rateFormatter.format(market.cdi.rate)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
             </article>
           </>
         ) : error ? (

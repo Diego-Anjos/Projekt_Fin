@@ -2,9 +2,11 @@
 
 import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
-import { getTransactions, type TransactionDocument } from "@/lib/appwrite/database";
+import { useConfirm } from "@/contexts/confirm-dialog-context";
+import { deleteTransaction, getTransactions, type TransactionDocument } from "@/lib/appwrite/database";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -54,9 +56,11 @@ const statusLabel = {
 
 export default function ComprasPage() {
   const { user } = useSession();
+  const { confirm } = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<PurchaseTransaction | null>(null);
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("all");
@@ -129,8 +133,28 @@ export default function ComprasPage() {
     });
   }
 
-  function handleDelete(id: string) {
-    setTransactions((current) => current.filter((item) => item.id !== id));
+  async function handleDelete(transaction: PurchaseTransaction) {
+    const isConfirmed = await confirm({
+      title: "Excluir Transação",
+      description: `Tem certeza que deseja excluir a transação "${transaction.description}"? Esta ação não pode ser desfeita.`,
+      confirmText: "Excluir",
+      variant: "danger",
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      setDeletingId(transaction.id);
+      await deleteTransaction(transaction.id);
+      setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+      if (editing?.id === transaction.id) closeModal();
+      toast.success(`Transação "${transaction.description}" excluída com sucesso!`);
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      toast.error("Falha ao excluir a transação. Tente novamente.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -280,9 +304,10 @@ export default function ComprasPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(transaction.id)}
+                          onClick={() => handleDelete(transaction)}
+                          disabled={deletingId === transaction.id}
                           aria-label={`Apagar ${transaction.description}`}
-                          className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-red-950 hover:text-red-400"
+                          className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-red-950 hover:text-red-400 disabled:opacity-50"
                         >
                           <Trash2 className="size-4" aria-hidden="true" />
                         </button>

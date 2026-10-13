@@ -1,6 +1,10 @@
 "use client";
 
+import { useSession } from "@/components/require-session";
+import { createTransaction, updateTransaction } from "@/lib/appwrite/database";
+import { formatCurrencyInput, parseCurrencyToNumber } from "@/lib/utils";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 
 const categories = [
@@ -30,15 +34,9 @@ export type PurchaseTransaction = {
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
-const amountFormatter = new Intl.NumberFormat("pt-BR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-function parseAmount(value: string) {
-  const normalized = value.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? amount : Number.NaN;
+function toDateInputValue(isoDate: string) {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(isoDate);
+  return match?.[1] ?? "";
 }
 
 function collectValidationErrors(form: HTMLFormElement) {
@@ -86,13 +84,17 @@ function TransactionModalForm({
   onSave,
 }: Omit<TransactionModalProps, "open">) {
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
-  const [amount, setAmount] = useState(transaction ? amountFormatter.format(transaction.amount) : "");
+  const [amount, setAmount] = useState(
+    transaction ? formatCurrencyInput(Math.round(transaction.amount * 100)) : "",
+  );
   const [description, setDescription] = useState(transaction?.description ?? "");
   const [category, setCategory] = useState(transaction?.category ?? "");
-  const [date, setDate] = useState(transaction?.date ?? "");
+  const [date, setDate] = useState(transaction ? toDateInputValue(transaction.date) : "");
   const [status, setStatus] = useState<TransactionStatus>(transaction?.status ?? "Paid");
   const [amountError, setAmountError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useSession();
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -116,37 +118,66 @@ function TransactionModalForm({
     form.requestSubmit();
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    console.log("--- SUBMIT DO FORMULÁRIO ---");
 
     const errors = collectValidationErrors(event.currentTarget);
-    const parsedAmount = parseAmount(amount);
+    const parsedAmount = parseCurrencyToNumber(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       errors.amount = "Informe um valor maior que zero.";
     }
 
     if (Object.keys(errors).length > 0) {
-      console.log("Erros de validação:", errors);
       setAmountError(errors.amount ?? "");
       setSubmitError(Object.values(errors).join(" "));
       return;
     }
 
     setAmountError("");
-    setSubmitError("");
 
-    onSave({
-      id: transaction?.id ?? crypto.randomUUID(),
+    if (!user?.$id) {
+      setSubmitError("Sessão em falta. Entre novamente e tente salvar.");
+      return;
+    }
+
+    const dataToSend = {
+      userId: user.$id,
       type,
-      amount: parsedAmount,
       description: description.trim(),
       category,
       date,
+      amount: parsedAmount,
       status,
-    });
-    onClose();
+    };
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError("");
+
+      const response = transaction
+        ? await updateTransaction(transaction.id, dataToSend)
+        : await createTransaction(dataToSend);
+
+      onSave({
+        id: response.$id,
+        type: response.type === "income" ? "income" : "expense",
+        amount: Number(response.amount),
+        description: response.description,
+        category: response.category,
+        date: response.date,
+        status: response.status === "Pending" ? "Pending" : "Paid",
+      });
+      toast.success(transaction ? "Transação atualizada com sucesso!" : "Transação salva com sucesso!");
+      onClose();
+    } catch (error) {
+      console.error("Falha ao salvar a transação.", error);
+      const message = error instanceof Error ? error.message : "Falha ao salvar a transação.";
+      setSubmitError(message);
+      toast.error("Falha ao salvar a transação. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -222,10 +253,14 @@ function TransactionModalForm({
               <input
                 type="text"
                 name="amount"
-                inputMode="decimal"
+                inputMode="numeric"
                 value={amount}
                 onChange={(event) => {
-                  setAmount(event.target.value);
+                  const formatted = formatCurrencyInput(event.target.value);
+                  event.target.value = formatted;
+                  const end = formatted.length;
+                  event.target.setSelectionRange(end, end);
+                  setAmount(formatted);
                   setAmountError("");
                 }}
                 placeholder="0,00"
@@ -323,9 +358,10 @@ function TransactionModalForm({
             type="submit"
             form="transaction-form"
             onClick={handleSaveClick}
-            className="col-span-1 h-14 w-full rounded-xl bg-emerald-600 text-base font-semibold tracking-wide text-white transition-colors duration-200 hover:bg-emerald-500 md:col-span-2"
+            disabled={isSubmitting}
+            className="col-span-1 h-14 w-full rounded-xl bg-emerald-600 text-base font-semibold tracking-wide text-white transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60 md:col-span-2"
           >
-            Salvar Transação
+            {isSubmitting ? "A guardar..." : "Salvar Transação"}
           </button>
         </form>
       </div>

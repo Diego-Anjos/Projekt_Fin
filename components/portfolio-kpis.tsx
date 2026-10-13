@@ -1,14 +1,4 @@
-import type { Allocation, DashboardKpis } from "@/types/dashboard";
-
-const allocationFormatter = new Intl.NumberFormat("pt-BR", {
-  maximumFractionDigits: 2,
-});
-
-const allocationStroke: Record<string, string> = {
-  "bg-emerald-500": "#10b981",
-  "bg-emerald-300": "#6ee7b7",
-  "bg-gray-400": "#9ca3af",
-};
+import type { DashboardKpis } from "@/types/dashboard";
 
 function valueTone(value: number) {
   if (value > 0) return "text-emerald-500";
@@ -24,11 +14,9 @@ function growthBadgeTone(growth: string) {
 
 export function PortfolioKPIs({
   kpis,
-  allocations,
   formatCurrency,
 }: {
   kpis: DashboardKpis;
-  allocations: Allocation[];
   formatCurrency: (value: number) => string;
 }) {
   return (
@@ -55,61 +43,11 @@ export function PortfolioKPIs({
       </article>
 
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
-        <p className="text-xs font-medium text-zinc-400">Investment Allocation</p>
-        <div className="mt-4 flex flex-1 items-center gap-3">
-          <AllocationDonut allocations={allocations} />
-          <ul className="flex flex-col justify-center gap-1.5">
-            {allocations.map((item) => (
-              <li key={item.id} className="flex items-center gap-1.5 text-xs">
-                <span className={`size-2 shrink-0 rounded-full ${item.color}`} />
-                <span className="text-zinc-100">{item.label}</span>
-                <span className="text-zinc-400">{allocationFormatter.format(item.percentage)}%</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <p className="text-xs font-medium text-zinc-400">Gastos do Mês Atual</p>
+        <p className="mt-4 text-3xl font-semibold tracking-tight text-red-500">
+          {formatCurrency(kpis.monthlyExpenses)}
+        </p>
       </article>
     </div>
-  );
-}
-
-function AllocationDonut({ allocations }: { allocations: Allocation[] }) {
-  const size = 52;
-  const stroke = 8;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const total = allocations.reduce((sum, item) => sum + item.percentage, 0);
-  let consumed = 0;
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="-rotate-90"
-      aria-hidden="true"
-    >
-      {total > 0
-        ? allocations.map((segment) => {
-            const length = circumference * (segment.percentage / total);
-            const dashOffset = -consumed;
-            consumed += length;
-
-            return (
-              <circle
-                key={segment.id}
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={allocationStroke[segment.color] ?? "#71717a"}
-                strokeWidth={stroke}
-                strokeDasharray={`${length} ${circumference - length}`}
-                strokeDashoffset={dashOffset}
-              />
-            );
-          })
-        : null}
-    </svg>
   );
 }

@@ -3,9 +3,11 @@
 import { CompanyLogo } from "@/components/company-logo";
 import { useSession } from "@/components/require-session";
 import { SubscriptionModal, type ServiceSubscription } from "@/components/subscription-modal";
-import { getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
-import { Layers, Plus } from "lucide-react";
+import { useConfirm } from "@/contexts/confirm-dialog-context";
+import { deleteSubscription, getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
+import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -49,7 +51,10 @@ function formatDate(isoDate: string) {
 
 export default function SubscriptionsPage() {
   const { user } = useSession();
+  const { confirm } = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState<ServiceSubscription | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<ServiceSubscription[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +68,10 @@ export default function SubscriptionsPage() {
         setSubscriptions(response.documents.map(toServiceSubscription));
       } catch (error) {
         console.error("Falha ao carregar assinaturas.", error);
-        if (active) setSubscriptions([]);
+        if (active) {
+          setSubscriptions([]);
+          toast.error("Falha ao carregar as assinaturas. Tente novamente.");
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -76,8 +84,53 @@ export default function SubscriptionsPage() {
     };
   }, [user.$id]);
 
+  function openCreateModal() {
+    setEditingSubscription(null);
+    setIsModalOpen(true);
+  }
+
+  function handleEditSubscription(subscription: ServiceSubscription) {
+    setEditingSubscription(subscription);
+    setIsModalOpen(true);
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+    setEditingSubscription(null);
+  }
+
+  async function handleDeleteSubscription(subscription: ServiceSubscription) {
+    const isConfirmed = await confirm({
+      title: "Excluir Assinatura",
+      description: `Tem certeza que deseja excluir a assinatura "${subscription.name}"? Esta ação não pode ser desfeita.`,
+      confirmText: "Excluir",
+      variant: "danger",
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      setDeletingId(subscription.id);
+      await deleteSubscription(subscription.id);
+      setSubscriptions((current) => current.filter((item) => item.id !== subscription.id));
+      if (editingSubscription?.id === subscription.id) {
+        closeModal();
+      }
+      toast.success(`Assinatura "${subscription.name}" excluída com sucesso!`);
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      toast.error("Falha ao excluir a assinatura. Tente novamente.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function handleSave(subscription: ServiceSubscription) {
-    setSubscriptions((current) => [subscription, ...current]);
+    setSubscriptions((current) => {
+      const exists = current.some((item) => item.id === subscription.id);
+      if (!exists) return [subscription, ...current];
+      return current.map((item) => (item.id === subscription.id ? subscription : item));
+    });
   }
 
   return (
@@ -98,7 +151,7 @@ export default function SubscriptionsPage() {
         </div>
         <button
           type="button"
-          onClick={() => setIsModalOpen(true)}
+          onClick={openCreateModal}
           className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
         >
           <Plus className="size-4" aria-hidden="true" />
@@ -118,13 +171,34 @@ export default function SubscriptionsPage() {
           {subscriptions.map((subscription) => (
             <li
               key={subscription.id}
-              className="flex flex-col rounded-xl border border-zinc-700/50 bg-black p-5 transition-colors duration-200 hover:border-emerald-500/50"
+              className="group flex flex-col rounded-xl border border-zinc-700/50 bg-black p-5 transition-colors duration-200 hover:border-emerald-500/50"
             >
               <div className="flex items-start justify-between gap-3">
                 <CompanyLogo name={subscription.name} />
-                <span className="inline-flex rounded-md border border-emerald-800 bg-emerald-950 px-2.5 py-1 text-xs font-medium text-emerald-300">
-                  Ativa
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                    Ativa
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleEditSubscription(subscription)}
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Editar assinatura"
+                    aria-label={`Editar ${subscription.name}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSubscription(subscription)}
+                    disabled={deletingId === subscription.id}
+                    className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+                    title="Excluir assinatura"
+                    aria-label={`Excluir ${subscription.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
 
               <h2 className="mt-4 text-base font-semibold text-zinc-50">{subscription.name}</h2>
@@ -157,7 +231,8 @@ export default function SubscriptionsPage() {
 
       <SubscriptionModal
         open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        subscription={editingSubscription}
+        onClose={closeModal}
         onSave={handleSave}
       />
     </div>

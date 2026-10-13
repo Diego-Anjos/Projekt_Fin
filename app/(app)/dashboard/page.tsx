@@ -15,34 +15,8 @@ import {
   type SubscriptionDocument,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
-import type { Allocation, DashboardKpis, PerformanceData, Subscription, Transaction } from "@/types/dashboard";
-
-const performanceData: PerformanceData = [
-  { month: "Jan", value: 109200 },
-  { month: "", value: 113800 },
-  { month: "", value: 108400 },
-  { month: "", value: 114600 },
-  { month: "Feb", value: 111200 },
-  { month: "", value: 117900 },
-  { month: "", value: 115100 },
-  { month: "", value: 120400 },
-  { month: "Mar", value: 125400 },
-  { month: "", value: 119800 },
-  { month: "", value: 122600 },
-  { month: "", value: 118200 },
-  { month: "Apr", value: 123900 },
-  { month: "", value: 121100 },
-  { month: "", value: 126700 },
-  { month: "", value: 124200 },
-  { month: "May", value: 128800 },
-  { month: "", value: 125600 },
-  { month: "", value: 129900 },
-  { month: "", value: 127400 },
-  { month: "Jun", value: 131600 },
-  { month: "", value: 128300 },
-  { month: "", value: 132400 },
-  { month: "", value: 130500 },
-];
+import { buildMonthlyComparison } from "@/lib/monthly-comparison";
+import type { DashboardKpis, MonthlyComparisonPoint, Subscription, Transaction } from "@/types/dashboard";
 
 const contributionLevels = [
   [0, 1, 2, 1, 3, 2, 0, 1, 2, 3, 1, 0, 2, 1, 3, 2, 0, 1],
@@ -89,25 +63,28 @@ function toDashboardSubscription(document: SubscriptionDocument): Subscription {
 
 function computeCashKpis(documents: TransactionDocument[]) {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
   let totalWealth = 0;
   let monthlyCashFlow = 0;
+  let monthlyExpenses = 0;
 
   for (const document of documents) {
-    const signed = document.type === "income" ? document.amount : -document.amount;
+    const amount = Number(document.amount);
+    const signed = document.type === "income" ? amount : -amount;
     totalWealth += signed;
 
     const match = /^(\d{4})-(\d{2})/.exec(document.date);
     const documentYear = match ? Number(match[1]) : new Date(document.date).getFullYear();
-    const documentMonth = match ? Number(match[2]) : new Date(document.date).getMonth() + 1;
+    const documentMonth = match ? Number(match[2]) - 1 : new Date(document.date).getMonth();
 
-    if (documentYear === year && documentMonth === month) {
-      monthlyCashFlow += signed;
-    }
+    if (documentYear !== currentYear || documentMonth !== currentMonth) continue;
+
+    monthlyCashFlow += signed;
+    if (document.type === "expense") monthlyExpenses += amount;
   }
 
-  return { totalWealth, monthlyCashFlow };
+  return { totalWealth, monthlyCashFlow, monthlyExpenses };
 }
 
 export default function Home() {
@@ -116,16 +93,12 @@ export default function Home() {
     totalWealth: 0,
     wealthGrowth: "0%",
     monthlyCashFlow: 0,
+    monthlyExpenses: 0,
   });
-
-  const [allocations, setAllocations] = useState<Allocation[]>([
-    { id: 1, label: "Ações", percentage: 35, color: "bg-emerald-500" },
-    { id: 2, label: "Renda Fixa", percentage: 40, color: "bg-emerald-300" },
-    { id: 3, label: "Outros", percentage: 25, color: "bg-gray-400" },
-  ]);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [comparison, setComparison] = useState<MonthlyComparisonPoint[]>(() => buildMonthlyComparison([]));
 
   useEffect(() => {
     let active = true;
@@ -133,14 +106,15 @@ export default function Home() {
     async function loadFinance() {
       try {
         const [transactionsResponse, subscriptionsResponse] = await Promise.all([
-          getTransactions(user.$id),
+          getTransactions(user.$id, 100),
           getSubscriptions(user.$id),
         ]);
 
         if (!active) return;
 
-        setTransactions(transactionsResponse.documents.map(toDashboardTransaction));
+        setTransactions(transactionsResponse.documents.slice(0, 10).map(toDashboardTransaction));
         setSubscriptions(subscriptionsResponse.documents.map(toDashboardSubscription));
+        setComparison(buildMonthlyComparison(transactionsResponse.documents));
         setKpis((current) => ({
           ...current,
           ...computeCashKpis(transactionsResponse.documents),
@@ -173,9 +147,9 @@ export default function Home() {
         <h2 id="portfolio-kpis-heading" className="text-base font-semibold text-zinc-100">
           Portfolio KPIs
         </h2>
-        <PortfolioKPIs kpis={kpis} allocations={allocations} formatCurrency={formatCurrency} />
+        <PortfolioKPIs kpis={kpis} formatCurrency={formatCurrency} />
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <PortfolioPerformance data={performanceData} />
+          <PortfolioPerformance data={comparison} />
           <TradesHeatmap />
         </div>
       </section>

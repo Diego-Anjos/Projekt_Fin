@@ -31,12 +31,49 @@ function ownerPermissions(userId: string) {
   return [Permission.read(role), Permission.update(role), Permission.delete(role)];
 }
 
-export async function getTransactions(userId: string) {
+export async function getTransactions(userId: string, limit = 10) {
   return databases.listDocuments<TransactionDocument>(
     appwriteConfig.databaseId,
     appwriteConfig.transactionsCollectionId,
-    [Query.equal("userId", userId), Query.orderDesc("date"), Query.limit(10)],
+    [Query.equal("userId", userId), Query.orderDesc("date"), Query.limit(limit)],
   );
+}
+
+const TRANSACTION_PAGE_SIZE = 100;
+
+export async function getAllTransactions(userId: string) {
+  const documents: TransactionDocument[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 20; page += 1) {
+    const queries = [
+      Query.equal("userId", userId),
+      Query.orderDesc("date"),
+      Query.limit(TRANSACTION_PAGE_SIZE),
+    ];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+
+    let response: Models.DocumentList<TransactionDocument>;
+    try {
+      response = await databases.listDocuments<TransactionDocument>(
+        appwriteConfig.databaseId,
+        appwriteConfig.transactionsCollectionId,
+        queries,
+      );
+    } catch (error) {
+      if (documents.length > 0) return documents;
+      throw error;
+    }
+
+    documents.push(...response.documents);
+    if (response.documents.length < TRANSACTION_PAGE_SIZE) break;
+
+    const nextCursor = response.documents[response.documents.length - 1]?.$id;
+    if (!nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+
+  return documents;
 }
 
 export async function getSubscriptions(userId: string) {
@@ -47,13 +84,42 @@ export async function getSubscriptions(userId: string) {
   );
 }
 
+function toTransactionPayload(data: TransactionInput) {
+  return {
+    userId: data.userId,
+    type: data.type,
+    description: data.description,
+    category: data.category,
+    date: data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
+    amount: Number(data.amount),
+    status: data.status,
+  };
+}
+
 export async function createTransaction(data: TransactionInput) {
   return databases.createDocument<TransactionDocument>(
     appwriteConfig.databaseId,
     appwriteConfig.transactionsCollectionId,
     ID.unique(),
-    data,
+    toTransactionPayload(data),
     ownerPermissions(data.userId),
+  );
+}
+
+export async function updateTransaction(documentId: string, data: TransactionInput) {
+  return databases.updateDocument<TransactionDocument>(
+    appwriteConfig.databaseId,
+    appwriteConfig.transactionsCollectionId,
+    documentId,
+    toTransactionPayload(data),
+  );
+}
+
+export async function deleteTransaction(documentId: string) {
+  return databases.deleteDocument(
+    appwriteConfig.databaseId,
+    appwriteConfig.transactionsCollectionId,
+    documentId,
   );
 }
 
@@ -104,4 +170,30 @@ export async function createSubscription(data: SubscriptionInput) {
     console.error("Mensagem exata:", message);
     throw error;
   }
+}
+
+export const deleteSubscription = async (documentId: string) => {
+  return await databases.deleteDocument(
+    appwriteConfig.databaseId,
+    appwriteConfig.subscriptionsCollectionId,
+    documentId,
+  );
+};
+
+export async function updateSubscription(documentId: string, data: SubscriptionInput) {
+  return databases.updateDocument<SubscriptionDocument>(
+    appwriteConfig.databaseId,
+    appwriteConfig.subscriptionsCollectionId,
+    documentId,
+    {
+      userId: data.userId,
+      name: data.name,
+      amount: data.amount,
+      cycle: data.cycle,
+      subscribedAt: data.subscribedAt,
+      nextDue: data.nextDue,
+      payment: data.payment,
+      status: data.status || "active",
+    },
+  );
 }

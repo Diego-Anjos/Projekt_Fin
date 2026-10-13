@@ -2,13 +2,7 @@ export interface DashboardKpis {
   totalWealth: number;
   wealthGrowth: string;
   monthlyCashFlow: number;
-}
-
-export interface Allocation {
-  id: number;
-  label: string;
-  percentage: number;
-  color: string;
+  monthlyExpenses: number;
 }
 
 export interface Transaction {
@@ -28,9 +22,8 @@ export interface Subscription {
   renewalDate: string;
 }
 
-export interface PerformancePoint {
-  month: string;
-  value: number;
-}
-
-export type PerformanceData = PerformancePoint[];
+export type MonthlyComparisonPoint = {
+  mes: string;
+  gastos: number;
+  economia: number;
+};

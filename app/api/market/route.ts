@@ -17,6 +17,8 @@ type HgStock = {
 
 type HgTax = {
   selic?: unknown;
+  cdi?: unknown;
+  cdi_daily?: unknown;
 };
 
 type HgFinanceResponse = {
@@ -43,6 +45,7 @@ export type MarketSnapshot = {
   bitcoin: { buy: number; variation: number };
   ibovespa: { points: number; variation: number };
   selic: { rate: number };
+  cdi: { rate: number };
 };
 
 function toNumber(value: unknown): number | null {
@@ -54,9 +57,24 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function readSelic(taxes: HgTax | HgTax[] | undefined): number | null {
+function readInterestRates(
+  taxes: HgTax | HgTax[] | undefined,
+): { selic: number; cdi: number } | null {
   const entry = Array.isArray(taxes) ? taxes[0] : taxes;
-  return toNumber(entry?.selic);
+  const selic = toNumber(entry?.selic);
+  const cdiAnnual = toNumber(entry?.cdi);
+  const cdiDaily = toNumber(entry?.cdi_daily);
+  if (selic === null) return null;
+
+  // HG publishes the COPOM target in `selic` and often mirrors it in `cdi`.
+  // The effective annual CDI (a.a.) then sits in `cdi_daily`.
+  const effectiveCdi =
+    cdiDaily !== null && cdiDaily > 1 && (cdiAnnual === null || Math.abs(cdiAnnual - selic) < 0.001)
+      ? cdiDaily
+      : cdiAnnual;
+
+  if (effectiveCdi === null) return null;
+  return { selic, cdi: effectiveCdi };
 }
 
 function readBitcoinBrl(
@@ -132,7 +150,7 @@ export async function GET() {
   const euroVariation = toNumber(payload.results?.currencies?.EUR?.variation);
   const ibovespaPoints = toNumber(payload.results?.stocks?.IBOVESPA?.points);
   const ibovespaVariation = toNumber(payload.results?.stocks?.IBOVESPA?.variation);
-  const selicRate = readSelic(payload.results?.taxes);
+  const interestRates = readInterestRates(payload.results?.taxes);
   const bitcoin =
     dollarBuy === null
       ? null
@@ -150,7 +168,7 @@ export async function GET() {
     bitcoin === null ||
     ibovespaPoints === null ||
     ibovespaVariation === null ||
-    selicRate === null
+    interestRates === null
   ) {
     return Response.json(
       { error: "A resposta da API de mercado está incompleta." },
@@ -163,7 +181,8 @@ export async function GET() {
     euro: { buy: euroBuy, variation: euroVariation },
     bitcoin,
     ibovespa: { points: ibovespaPoints, variation: ibovespaVariation },
-    selic: { rate: selicRate },
+    selic: { rate: interestRates.selic },
+    cdi: { rate: interestRates.cdi },
   };
 
   return Response.json(snapshot);

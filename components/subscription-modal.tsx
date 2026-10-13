@@ -1,7 +1,8 @@
 "use client";
 
 import { useSession } from "@/components/require-session";
-import { createSubscription } from "@/lib/appwrite/database";
+import { createSubscription, updateSubscription } from "@/lib/appwrite/database";
+import { formatCurrencyInput, parseCurrencyToNumber } from "@/lib/utils";
 import { X } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 
@@ -22,10 +23,9 @@ export type ServiceSubscription = {
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
-function parseAmount(value: string) {
-  const normalized = value.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? amount : Number.NaN;
+function toDateInputValue(isoDate: string) {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(isoDate);
+  return match?.[1] ?? "";
 }
 
 function collectValidationErrors(form: HTMLFormElement) {
@@ -49,23 +49,44 @@ function collectValidationErrors(form: HTMLFormElement) {
 
 type SubscriptionModalProps = {
   open: boolean;
+  subscription?: ServiceSubscription | null;
   onClose: () => void;
   onSave: (subscription: ServiceSubscription) => void;
 };
 
-export function SubscriptionModal({ open, onClose, onSave }: SubscriptionModalProps) {
+export function SubscriptionModal({
+  open,
+  subscription = null,
+  onClose,
+  onSave,
+}: SubscriptionModalProps) {
   if (!open) return null;
 
-  return <SubscriptionModalForm onClose={onClose} onSave={onSave} />;
+  return (
+    <SubscriptionModalForm
+      key={subscription?.id ?? "new"}
+      subscription={subscription}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  );
 }
 
-function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps, "open">) {
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [cycle, setCycle] = useState<BillingCycle>("monthly");
-  const [subscribedAt, setSubscribedAt] = useState("");
-  const [nextDue, setNextDue] = useState("");
-  const [payment, setPayment] = useState<PaymentMethod>("credit");
+function SubscriptionModalForm({
+  subscription,
+  onClose,
+  onSave,
+}: Omit<SubscriptionModalProps, "open">) {
+  const [name, setName] = useState(subscription?.name ?? "");
+  const [amount, setAmount] = useState(
+    subscription ? formatCurrencyInput(Math.round(subscription.amount * 100)) : "",
+  );
+  const [cycle, setCycle] = useState<BillingCycle>(subscription?.cycle ?? "monthly");
+  const [subscribedAt, setSubscribedAt] = useState(
+    subscription ? toDateInputValue(subscription.subscribedAt) : "",
+  );
+  const [nextDue, setNextDue] = useState(subscription ? toDateInputValue(subscription.nextDue) : "");
+  const [payment, setPayment] = useState<PaymentMethod>(subscription?.payment ?? "credit");
   const [amountError, setAmountError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,7 +119,7 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
     console.log("--- SUBMIT DO FORMULÁRIO ---");
 
     const errors = collectValidationErrors(event.currentTarget);
-    const parsedAmount = parseAmount(amount);
+    const parsedAmount = parseCurrencyToNumber(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       errors.amount = "Informe um valor maior que zero.";
@@ -139,8 +160,10 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
       };
 
       console.log("A. Dados do formulário prontos:", dataToSend);
-      const response = await createSubscription(dataToSend);
-      console.log("B. Função createSubscription retornou com sucesso!");
+      const response = subscription
+        ? await updateSubscription(subscription.id, dataToSend)
+        : await createSubscription(dataToSend);
+      console.log("B. Persistência da assinatura retornou com sucesso!");
 
       onSave({
         ...formData,
@@ -180,9 +203,11 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
         </button>
 
         <h2 id="subscription-modal-title" className="pr-10 text-xl font-semibold text-zinc-50">
-          Nova Assinatura
+          {subscription ? "Editar Assinatura" : "Nova Assinatura"}
         </h2>
-        <p className="mt-1 mb-6 text-sm text-zinc-400">Cadastre um serviço recorrente</p>
+        <p className="mt-1 mb-6 text-sm text-zinc-400">
+          {subscription ? "Atualize os dados deste serviço recorrente" : "Cadastre um serviço recorrente"}
+        </p>
 
         <form
           id="subscription-form"
@@ -208,10 +233,14 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
             <input
               type="text"
               name="amount"
-              inputMode="decimal"
+              inputMode="numeric"
               value={amount}
               onChange={(event) => {
-                setAmount(event.target.value);
+                const formatted = formatCurrencyInput(event.target.value);
+                event.target.value = formatted;
+                const end = formatted.length;
+                event.target.setSelectionRange(end, end);
+                setAmount(formatted);
                 setAmountError("");
               }}
               placeholder="0,00"
@@ -249,7 +278,9 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
           </label>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Primeiro Vencimento</span>
+            <span className="text-sm font-medium text-zinc-300">
+              {subscription ? "Próximo Vencimento" : "Primeiro Vencimento"}
+            </span>
             <input
               type="date"
               name="nextDue"
@@ -297,7 +328,7 @@ function SubscriptionModalForm({ onClose, onSave }: Omit<SubscriptionModalProps,
               disabled={isSubmitting}
               className="h-12 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60"
             >
-              {isSubmitting ? "A guardar..." : "Salvar Assinatura"}
+              {isSubmitting ? "A guardar..." : subscription ? "Salvar alterações" : "Salvar Assinatura"}
             </button>
           </div>
         </form>

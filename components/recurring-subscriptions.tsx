@@ -23,7 +23,7 @@ export function RecurringSubscriptions({
       ) : (
         <ul className="mt-4 flex flex-col gap-4">
           {subscriptions.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-3">
+            <li key={item.id} className="group flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <CompanyLogo name={item.name} />
                 <div className="min-w-0">
