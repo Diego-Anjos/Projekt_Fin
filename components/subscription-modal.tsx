@@ -1,8 +1,10 @@
 "use client";
 
 import { useSession } from "@/components/require-session";
+import { CustomDatePicker, parseCalendarDate, toCalendarIso } from "@/components/ui/custom-date-picker";
+import { usePreferences } from "@/contexts/preferences-context";
 import { createSubscription, updateSubscription } from "@/lib/appwrite/database";
-import { formatCurrencyInput, parseCurrencyToNumber } from "@/lib/utils";
+import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
 import { X } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 
@@ -22,11 +24,6 @@ export type ServiceSubscription = {
 
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
-
-function toDateInputValue(isoDate: string) {
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(isoDate);
-  return match?.[1] ?? "";
-}
 
 function collectValidationErrors(form: HTMLFormElement) {
   const errors: Record<string, string> = {};
@@ -77,15 +74,18 @@ function SubscriptionModalForm({
   onClose,
   onSave,
 }: Omit<SubscriptionModalProps, "open">) {
+  const { currency } = usePreferences();
   const [name, setName] = useState(subscription?.name ?? "");
   const [amount, setAmount] = useState(
-    subscription ? formatCurrencyInput(Math.round(subscription.amount * 100)) : "",
+    subscription ? formatCurrencyInput(Math.round(subscription.amount * 100), currency) : "",
   );
   const [cycle, setCycle] = useState<BillingCycle>(subscription?.cycle ?? "monthly");
-  const [subscribedAt, setSubscribedAt] = useState(
-    subscription ? toDateInputValue(subscription.subscribedAt) : "",
+  const [subscribedAt, setSubscribedAt] = useState<Date | null>(
+    subscription ? parseCalendarDate(subscription.subscribedAt) : null,
   );
-  const [nextDue, setNextDue] = useState(subscription ? toDateInputValue(subscription.nextDue) : "");
+  const [nextDue, setNextDue] = useState<Date | null>(
+    subscription ? parseCalendarDate(subscription.nextDue) : null,
+  );
   const [payment, setPayment] = useState<PaymentMethod>(subscription?.payment ?? "credit");
   const [amountError, setAmountError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -93,7 +93,12 @@ function SubscriptionModalForm({
   const { user } = useSession();
 
   useEffect(() => {
+    setAmount((current) => (current ? formatCurrencyInput(current, currency) : current));
+  }, [currency]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && document.querySelector(".react-datepicker")) return;
       if (event.key === "Escape") onClose();
     }
 
@@ -125,7 +130,15 @@ function SubscriptionModalForm({
       errors.amount = "Informe um valor maior que zero.";
     }
 
-    if (Object.keys(errors).length > 0) {
+    if (!subscribedAt) {
+      errors.subscribedAt = "Informe a data da inscrição.";
+    }
+
+    if (!nextDue) {
+      errors.nextDue = "Informe a data de vencimento.";
+    }
+
+    if (Object.keys(errors).length > 0 || !subscribedAt || !nextDue) {
       console.log("Erros de validação:", errors);
       setAmountError(errors.amount ?? "");
       setSubmitError(Object.values(errors).join(" "));
@@ -138,8 +151,8 @@ function SubscriptionModalForm({
       name: name.trim(),
       amount: parsedAmount,
       cycle,
-      subscribedAt,
-      nextDue,
+      subscribedAt: toCalendarIso(subscribedAt),
+      nextDue: toCalendarIso(nextDue),
       payment,
       status: "active" as const,
     };
@@ -229,25 +242,32 @@ function SubscriptionModalForm({
           </label>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Valor (R$)</span>
-            <input
-              type="text"
-              name="amount"
-              inputMode="numeric"
-              value={amount}
-              onChange={(event) => {
-                const formatted = formatCurrencyInput(event.target.value);
-                event.target.value = formatted;
-                const end = formatted.length;
-                event.target.setSelectionRange(end, end);
-                setAmount(formatted);
-                setAmountError("");
-              }}
-              placeholder="0,00"
-              required
-              aria-invalid={amountError ? true : undefined}
-              className={fieldClassName}
-            />
+            <span className="text-sm font-medium text-zinc-300">
+              Valor ({getCurrencySymbol(currency)})
+            </span>
+            <span className="relative block">
+              <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-medium text-emerald-400 select-none">
+                {getCurrencySymbol(currency)}
+              </span>
+              <input
+                type="text"
+                name="amount"
+                inputMode="numeric"
+                value={amount}
+                onChange={(event) => {
+                  const formatted = formatCurrencyInput(event.target.value, currency);
+                  event.target.value = formatted;
+                  const end = formatted.length;
+                  event.target.setSelectionRange(end, end);
+                  setAmount(formatted);
+                  setAmountError("");
+                }}
+                placeholder={currency === "USD" ? "0.00" : "0,00"}
+                required
+                aria-invalid={amountError ? true : undefined}
+                className={`${fieldClassName} pl-12`}
+              />
+            </span>
             {amountError ? <span className="text-sm text-red-400">{amountError}</span> : null}
           </label>
 
@@ -267,13 +287,11 @@ function SubscriptionModalForm({
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">Data da Inscrição</span>
-            <input
-              type="date"
+            <CustomDatePicker
               name="subscribedAt"
-              value={subscribedAt}
-              onChange={(event) => setSubscribedAt(event.target.value)}
+              selected={subscribedAt}
+              onChange={setSubscribedAt}
               required
-              className={`${fieldClassName} [color-scheme:dark]`}
             />
           </label>
 
@@ -281,13 +299,11 @@ function SubscriptionModalForm({
             <span className="text-sm font-medium text-zinc-300">
               {subscription ? "Próximo Vencimento" : "Primeiro Vencimento"}
             </span>
-            <input
-              type="date"
+            <CustomDatePicker
               name="nextDue"
-              value={nextDue}
-              onChange={(event) => setNextDue(event.target.value)}
+              selected={nextDue}
+              onChange={setNextDue}
               required
-              className={`${fieldClassName} [color-scheme:dark]`}
             />
           </label>
 

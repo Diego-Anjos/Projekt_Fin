@@ -45,6 +45,7 @@ export function Sidebar() {
   const { user } = useSession();
   const displayName = user.name.trim() || user.email;
   const initials = getInitials(user.name, user.email);
+  const avatarUrl = typeof user.prefs.avatarUrl === "string" ? user.prefs.avatarUrl : "";
 
   return (
     <aside
@@ -65,12 +66,17 @@ export function Sidebar() {
         </Link>
       </div>
 
-      <div className="mx-4 mb-6 flex items-center gap-3 rounded-xl border border-[#113829] bg-[#0a241a] px-3 py-2.5">
+      <div className="mx-4 mb-6 flex items-center gap-4 rounded-xl border border-[#113829] bg-[#0a241a] px-3 py-2.5">
         <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white"
+          className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-emerald-500/20 bg-emerald-600 text-sm font-semibold text-white"
           aria-hidden="true"
         >
-          {initials}
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+          ) : (
+            initials
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-zinc-100">{displayName}</p>

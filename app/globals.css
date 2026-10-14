@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-datepicker/dist/react-datepicker.css";
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
@@ -11,4 +12,115 @@ html {
 
 body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.react-datepicker-wrapper,
+.react-datepicker__input-container {
+  display: block;
+  width: 100%;
+}
+
+.pf-datepicker-popper {
+  z-index: 80;
+}
+
+.react-datepicker.pf-datepicker {
+  border: 1px solid rgb(16 185 129 / 0.2);
+  border-radius: 0.75rem;
+  background-color: #06140e;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 0.875rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.45);
+}
+
+.pf-datepicker .react-datepicker__header {
+  border-bottom: 1px solid rgb(16 185 129 / 0.2);
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  background-color: transparent;
+}
+
+.pf-datepicker .react-datepicker__current-month {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.pf-datepicker .react-datepicker__day-name {
+  color: #94a3b8;
+}
+
+.pf-datepicker .react-datepicker__day {
+  border-radius: 0.375rem;
+  color: #e2e8f0;
+}
+
+.pf-datepicker .react-datepicker__day:not([aria-disabled="true"]):hover {
+  border-radius: 0.375rem;
+  background-color: rgb(255 255 255 / 0.1);
+}
+
+.pf-datepicker .react-datepicker__day--today {
+  font-weight: 700;
+  color: #34d399;
+}
+
+.pf-datepicker .react-datepicker__day--keyboard-selected {
+  border-radius: 0.375rem;
+  background-color: rgb(255 255 255 / 0.08);
+  color: #e2e8f0;
+}
+
+.pf-datepicker .react-datepicker__day--keyboard-selected.react-datepicker__day--today {
+  color: #34d399;
+}
+
+.pf-datepicker .react-datepicker__day--selected,
+.pf-datepicker .react-datepicker__day--selected.react-datepicker__day--today,
+.pf-datepicker .react-datepicker__day--selected.react-datepicker__day--keyboard-selected {
+  border-radius: 0.375rem;
+  background-color: #059669;
+  color: #fff;
+}
+
+.pf-datepicker .react-datepicker__day--selected:not([aria-disabled="true"]):hover {
+  background-color: #10b981;
+}
+
+.pf-datepicker .react-datepicker__day--outside-month {
+  color: #64748b;
+}
+
+.pf-datepicker .react-datepicker__navigation-icon::before {
+  border-color: #34d399;
+}
+
+.pf-datepicker .react-datepicker__navigation:hover *::before {
+  border-color: #6ee7b7;
+}
+
+/* Custom Scrollbar */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #047857 transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #047857;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
 }

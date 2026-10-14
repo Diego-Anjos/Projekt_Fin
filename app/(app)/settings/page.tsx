@@ -1,7 +1,19 @@
 "use client";
 
-import { Bell, Download, Plus, Tags, Trash2, UserRound, Wallet } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { usePreferences } from "@/contexts/preferences-context";
+import {
+  createCategory,
+  deleteCategory,
+  getCategories,
+  type CategoryDocument,
+} from "@/lib/appwrite/database";
+import { updateUserProfile } from "@/lib/appwrite/auth";
+import { account } from "@/lib/appwrite/client";
+import { useSession } from "@/components/require-session";
+import { getCategoryIcon } from "@/lib/category-utils";
+import { Bell, Download, Plus, Tag, Tags, Trash2, UserRound, Wallet } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type SettingsTab = "perfil" | "preferencias" | "categorias" | "notificacoes" | "dados";
 
@@ -13,10 +25,10 @@ const tabs: { id: SettingsTab; label: string; icon: typeof UserRound }[] = [
   { id: "dados", label: "Dados e Exportação", icon: Download },
 ];
 
+const DEFAULT_CATEGORIES = ["Alimentação", "Transporte", "Moradia", "Saúde", "Lazer", "Assinaturas", "Salário"];
+
 const fieldClassName =
   "h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
-
-const initialCategories = ["Alimentação", "Transporte"];
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
@@ -83,10 +95,12 @@ export default function SettingsPage() {
 
 function ProfilePanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState("Ethan Miller");
-  const [email, setEmail] = useState("ethan.miller@projektfin.com");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const { syncUser } = useSession();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const initials = name
     .split(" ")
@@ -95,19 +109,67 @@ function ProfilePanel() {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 
+  useEffect(() => {
+    let active = true;
+
+    account
+      .get()
+      .then((user) => {
+        if (!active) return;
+        const avatarUrl = user.prefs.avatarUrl;
+        setName(user.name);
+        setEmail(user.email);
+        setAvatarPreview(typeof avatarUrl === "string" && avatarUrl.length > 0 ? avatarUrl : null);
+      })
+      .catch(() => {
+        if (!active) return;
+        toast.error("Não foi possível carregar o perfil.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function handleAvatarChange(file: File | undefined) {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecione um ficheiro de imagem.");
+      return;
+    }
+
     const nextUrl = URL.createObjectURL(file);
-    setAvatarUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
+    setAvatarPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
       return nextUrl;
     });
-    setSaved(false);
+    setAvatarFile(file);
   }
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaved(true);
+    if (isLoading) return;
+
+    const toastId = toast.loading("A guardar alterações...");
+    setIsLoading(true);
+
+    try {
+      const updated = await updateUserProfile(name, avatarFile ?? undefined);
+      const avatarUrl = updated.prefs.avatarUrl;
+      setName(updated.name);
+      setAvatarPreview((current) => {
+        if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+        return typeof avatarUrl === "string" && avatarUrl.length > 0 ? avatarUrl : null;
+      });
+      setAvatarFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      syncUser(updated);
+      toast.success("Perfil atualizado com sucesso!", { id: toastId });
+    } catch {
+      toast.error("Não foi possível atualizar o perfil.", { id: toastId });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -119,10 +181,10 @@ function ProfilePanel() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-600 text-lg font-semibold text-white">
-          {avatarUrl ? (
-            // Blob previews cannot go through the Next image optimizer.
+          {avatarPreview ? (
+            // Blob previews and Appwrite file URLs stay outside the image optimizer.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="size-full object-cover" />
+            <img src={avatarPreview} alt="" className="size-full object-cover" />
           ) : (
             <span aria-hidden="true">{initials || "EM"}</span>
           )}
@@ -130,9 +192,10 @@ function ProfilePanel() {
         <div>
           <input
             ref={fileInputRef}
+            id="avatar-upload"
             type="file"
             accept="image/*"
-            className="sr-only"
+            className="hidden"
             onChange={(event) => handleAvatarChange(event.target.files?.[0])}
           />
           <button
@@ -150,11 +213,9 @@ function ProfilePanel() {
         Nome
         <input
           value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-            setSaved(false);
-          }}
+          onChange={(event) => setName(event.target.value)}
           autoComplete="name"
+          disabled={isLoading}
           className={fieldClassName}
         />
       </label>
@@ -164,22 +225,18 @@ function ProfilePanel() {
         <input
           type="email"
           value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            setSaved(false);
-          }}
+          readOnly
+          disabled
           autoComplete="email"
-          className={fieldClassName}
+          className={`${fieldClassName} cursor-not-allowed opacity-60`}
         />
       </label>
 
-      <div className="flex flex-col items-start gap-3 border-t border-zinc-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-emerald-400" role="status">
-          {saved ? "Alterações guardadas." : ""}
-        </p>
+      <div className="flex items-center justify-end border-t border-zinc-800 pt-6">
         <button
           type="submit"
-          className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
+          disabled={isLoading}
+          className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Guardar Alterações
         </button>
@@ -189,8 +246,7 @@ function ProfilePanel() {
 }
 
 function PreferencesPanel() {
-  const [currency, setCurrency] = useState("BRL");
-  const [hideBalances, setHideBalances] = useState(false);
+  const { currency, setCurrency, privacyMode, setPrivacyMode } = usePreferences();
 
   return (
     <div className="flex flex-col gap-6">
@@ -203,12 +259,18 @@ function PreferencesPanel() {
         Moeda Principal
         <select
           value={currency}
-          onChange={(event) => setCurrency(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value !== "BRL" && value !== "USD" && value !== "EUR") return;
+            setCurrency(value);
+            const label = event.target.selectedOptions[0]?.text ?? value;
+            toast.success(`Moeda atualizada para ${label}`);
+          }}
           className={fieldClassName}
         >
           <option value="BRL">BRL — Real brasileiro</option>
-          <option value="EUR">EUR — Euro</option>
           <option value="USD">USD — Dólar americano</option>
+          <option value="EUR">EUR — Euro</option>
         </select>
       </label>
 
@@ -216,12 +278,19 @@ function PreferencesPanel() {
         <div>
           <p className="text-sm font-medium text-zinc-100">Modo de Privacidade (Ocultar saldos)</p>
           <p className="mt-1 text-xs text-zinc-500">
-            {hideBalances ? "Os saldos estão ocultos." : "Os saldos estão visíveis."}
+            {privacyMode ? "Os saldos estão ocultos." : "Os saldos estão visíveis."}
           </p>
         </div>
         <Toggle
-          checked={hideBalances}
-          onChange={setHideBalances}
+          checked={privacyMode}
+          onChange={(next) => {
+            setPrivacyMode(next);
+            if (next) {
+              toast.success("Modo de privacidade ativado. Os saldos estão ocultos.");
+            } else {
+              toast.success("Modo de privacidade desativado. Os saldos estão visíveis.");
+            }
+          }}
           label="Modo de Privacidade (Ocultar saldos)"
         />
       </div>
@@ -230,14 +299,90 @@ function PreferencesPanel() {
 }
 
 function CategoriesPanel() {
-  const [categories, setCategories] = useState(initialCategories);
-  const [draft, setDraft] = useState("");
+  const { user } = useSession();
+  const [categories, setCategories] = useState<CategoryDocument[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  function addCategory() {
-    const name = draft.trim();
-    if (!name) return;
-    setCategories((current) => [...current, name]);
-    setDraft("");
+  useEffect(() => {
+    let active = true;
+
+    getCategories(user.$id)
+      .then((documents) => {
+        if (!active) return;
+        setCategories(documents.length === 0 ? [] : documents);
+      })
+      .catch(() => {
+        if (!active) return;
+        toast.error("Não foi possível carregar as categorias.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
+
+  async function addCategory() {
+    const name = newCategoryName.trim();
+    if (!name || isSubmitting) return;
+
+    const alreadyExists = categories.some(
+      (category) => category.name.localeCompare(name, "pt-BR", { sensitivity: "accent" }) === 0,
+    );
+    if (alreadyExists) {
+      toast.error("Essa categoria já existe.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const created = await createCategory(user.$id, name);
+      setCategories((current) =>
+        [...current, created].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
+      );
+      setNewCategoryName("");
+      toast.success("Categoria criada com sucesso!");
+    } catch {
+      toast.error("Não foi possível criar a categoria.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function createDefaultCategories() {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await Promise.all(DEFAULT_CATEGORIES.map((name) => createCategory(user.$id, name)));
+      const documents = await getCategories(user.$id);
+      setCategories(documents);
+      toast.success("Categorias padrão criadas!");
+    } catch {
+      toast.error("Não foi possível criar as categorias padrão.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function removeCategory(category: CategoryDocument) {
+    if (deletingId) return;
+    setDeletingId(category.$id);
+
+    try {
+      await deleteCategory(category.$id);
+      setCategories((current) => current.filter((item) => item.$id !== category.$id));
+      toast.success("Categoria excluída.");
+    } catch {
+      toast.error("Não foi possível excluir a categoria.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -247,16 +392,54 @@ function CategoriesPanel() {
         <p className="mt-1 text-sm text-zinc-400">Organize receitas e despesas por tipo.</p>
       </div>
 
-      <ul className="flex flex-col gap-2">
-        {categories.map((category) => (
-          <li
-            key={category}
-            className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100"
+      {isLoading ? (
+        <div className="flex flex-col gap-2" aria-busy="true">
+          <span className="h-12 animate-pulse rounded-lg bg-zinc-900" />
+          <span className="h-12 animate-pulse rounded-lg bg-zinc-900" />
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-zinc-800 bg-zinc-950 px-6 py-10 text-center">
+          <Tag className="size-8 text-zinc-400" aria-hidden="true" />
+          <p className="max-w-sm text-sm text-zinc-400">
+            Nenhuma categoria encontrada. Que tal começar com as essenciais?
+          </p>
+          <button
+            type="button"
+            onClick={() => void createDefaultCategories()}
+            disabled={isSubmitting}
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {category}
-          </li>
-        ))}
-      </ul>
+            Criar Categorias Padrão
+          </button>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {categories.map((category) => {
+            const CategoryIcon = getCategoryIcon(category.name);
+
+            return (
+            <li
+              key={category.$id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-100"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <CategoryIcon className="size-4 shrink-0 text-emerald-400" aria-hidden="true" />
+                <span className="truncate">{category.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => removeCategory(category)}
+                disabled={deletingId === category.$id}
+                aria-label={`Excluir ${category.name}`}
+                className="rounded-lg p-2 text-zinc-500 transition-colors duration-200 hover:bg-rose-500/10 hover:text-rose-500 disabled:opacity-50"
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </button>
+            </li>
+            );
+          })}
+        </ul>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <label className="sr-only" htmlFor="new-category">
@@ -264,21 +447,23 @@ function CategoriesPanel() {
         </label>
         <input
           id="new-category"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          value={newCategoryName}
+          onChange={(event) => setNewCategoryName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              addCategory();
+              void addCategory();
             }
           }}
           placeholder="Nome da categoria"
+          disabled={isSubmitting}
           className={fieldClassName}
         />
         <button
           type="button"
-          onClick={addCategory}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
+          onClick={() => void addCategory()}
+          disabled={isSubmitting || !newCategoryName.trim()}
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="size-4" aria-hidden="true" />
           Nova Categoria

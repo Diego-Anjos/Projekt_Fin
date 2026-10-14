@@ -4,15 +4,12 @@ import { CompanyLogo } from "@/components/company-logo";
 import { useSession } from "@/components/require-session";
 import { SubscriptionModal, type ServiceSubscription } from "@/components/subscription-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
+import { usePreferences } from "@/contexts/preferences-context";
 import { deleteSubscription, getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
+import { formatCurrency } from "@/lib/utils";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
 
 const cycleLabel = {
   monthly: "Mensal",
@@ -52,6 +49,7 @@ function formatDate(isoDate: string) {
 export default function SubscriptionsPage() {
   const { user } = useSession();
   const { confirm } = useConfirm();
+  const { currency, privacyMode } = usePreferences();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<ServiceSubscription | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -205,7 +203,7 @@ export default function SubscriptionsPage() {
 
               <p className="mt-4">
                 <span className="text-2xl font-semibold tracking-tight text-zinc-50">
-                  {currencyFormatter.format(subscription.amount)}
+                  {formatCurrency(subscription.amount, currency, privacyMode)}
                 </span>
                 <span className="text-sm text-zinc-400"> / {cycleLabel[subscription.cycle]}</span>
               </p>

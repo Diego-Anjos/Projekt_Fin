@@ -1,28 +1,39 @@
 "use client";
 
-import { fetchFinancialNews, type FinancialNews } from "@/services/newsApi";
 import { Newspaper, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type NewsCategory = "Geral" | "Cripto" | "Ações" | "Macroeconomia";
 
+type NewsArticle = {
+  source?: { name?: string | null } | null;
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
+  urlToImage?: string | null;
+  publishedAt?: string | null;
+};
+
 const filters: NewsCategory[] = ["Geral", "Cripto", "Ações", "Macroeconomia"];
 
-const categoryKeywords: Record<Exclude<NewsCategory, "Geral">, string[]> = {
-  Cripto: ["bitcoin", "cripto", "ethereum", "blockchain", "stablecoin"],
-  Ações: ["ação", "ações", "ibovespa", "bolsa", "b3", "petrobras", "vale"],
-  Macroeconomia: [
-    "selic",
-    "inflação",
-    "pib",
-    "copom",
-    "juros",
-    "dólar",
-    "cambio",
-    "câmbio",
-    "banco central",
-  ],
+const filterQueries: Record<Exclude<NewsCategory, "Geral">, string> = {
+  Cripto: "cripto OR bitcoin OR ethereum",
+  Ações: "ações OR bolsa OR ibovespa",
+  Macroeconomia: "selic OR copom OR inflação OR pib",
 };
+
+function isNewsArticle(value: unknown): value is NewsArticle {
+  if (!value || typeof value !== "object") return false;
+  const article = value as NewsArticle;
+
+  return (
+    typeof article.title === "string" &&
+    article.title.trim().length > 0 &&
+    article.title !== "[Removed]" &&
+    typeof article.url === "string" &&
+    article.url.trim().length > 0
+  );
+}
 
 function formatRelativeTime(isoDate: string) {
   const published = new Date(isoDate);
@@ -39,11 +50,11 @@ function formatRelativeTime(isoDate: string) {
   return days === 1 ? "Há 1 dia" : `Há ${days} dias`;
 }
 
-function matchesCategory(article: FinancialNews, category: NewsCategory) {
-  if (category === "Geral") return true;
-
-  const text = `${article.title} ${article.summary}`.toLowerCase();
-  return categoryKeywords[category].some((keyword) => text.includes(keyword));
+function newsPath(activeFilter: NewsCategory, search: string) {
+  const term = search.trim();
+  const q = term || (activeFilter === "Geral" ? "" : filterQueries[activeFilter]);
+  if (!q) return "/api/news";
+  return `/api/news?q=${encodeURIComponent(q)}`;
 }
 
 function NewsCardSkeleton() {
@@ -65,50 +76,78 @@ function NewsCardSkeleton() {
   );
 }
 
+function ArticleCover({ src }: { src: string | null | undefined }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div className="flex h-48 w-full items-center justify-center bg-zinc-900 text-zinc-600">
+        <Newspaper className="size-8" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      onError={() => setFailed(true)}
+      className="h-48 w-full bg-zinc-900 object-cover"
+    />
+  );
+}
+
 export default function NoticiasPage() {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<NewsCategory>("Geral");
-  const [articles, setArticles] = useState<FinancialNews[]>([]);
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<NewsCategory>("Geral");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
-    fetchFinancialNews()
-      .then((news) => {
-        if (!cancelled) setArticles(news);
-      })
-      .catch(() => {
-        if (!cancelled) setArticles([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+  useEffect(() => {
+    const controller = new AbortController();
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    async function loadNews() {
+      setIsLoading(true);
+      setLoadError(null);
 
-  const visibleArticles = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+      try {
+        const response = await fetch(newsPath(activeFilter, debouncedSearch), {
+          signal: controller.signal,
+        });
+        const data: unknown = await response.json();
 
-    return articles.filter((article) => {
-      const matchesTopic = matchesCategory(article, category);
-      const matchesQuery =
-        normalized.length === 0 ||
-        article.title.toLowerCase().includes(normalized) ||
-        article.summary.toLowerCase().includes(normalized) ||
-        article.source.toLowerCase().includes(normalized);
+        if (controller.signal.aborted) return;
 
-      return matchesTopic && matchesQuery;
-    });
-  }, [articles, category, query]);
+        if (!response.ok || !Array.isArray(data)) {
+          setArticles([]);
+          setLoadError("Não foi possível carregar as notícias agora.");
+          return;
+        }
 
-  const emptyMessage =
-    articles.length === 0
-      ? "Não foi possível carregar as notícias agora."
-      : "Nenhuma notícia encontrada para essa busca.";
+        setArticles(data.filter(isNewsArticle));
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setArticles([]);
+        setLoadError("Não foi possível carregar as notícias agora.");
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    }
+
+    void loadNews();
+
+    return () => controller.abort();
+  }, [activeFilter, debouncedSearch]);
+
+  const emptyMessage = loadError ?? "Nenhuma notícia encontrada para essa busca.";
 
   return (
     <div className="flex w-full flex-col gap-6 px-6 py-8">
@@ -127,8 +166,8 @@ export default function NoticiasPage() {
               aria-hidden="true"
             />
             <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Pesquisar manchete, fonte ou tema..."
               className="h-12 w-full rounded-2xl border border-emerald-800/50 bg-[#041610] pr-4 pl-12 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
@@ -139,14 +178,18 @@ export default function NoticiasPage() {
             className="mt-4 flex flex-wrap items-center justify-center gap-2"
           >
             {filters.map((filter) => {
-              const isActive = filter === category;
+              const isActive = filter === activeFilter;
 
               return (
                 <button
                   key={filter}
                   type="button"
                   aria-pressed={isActive}
-                  onClick={() => setCategory(filter)}
+                  onClick={() => {
+                    setSearch("");
+                    setDebouncedSearch("");
+                    setActiveFilter(filter);
+                  }}
                   className={
                     isActive
                       ? "rounded-full border border-emerald-500 bg-emerald-500/15 px-4 py-1.5 text-sm font-medium text-emerald-400"
@@ -171,51 +214,47 @@ export default function NoticiasPage() {
             <NewsCardSkeleton key={index} />
           ))}
         </section>
-      ) : visibleArticles.length === 0 ? (
+      ) : articles.length === 0 ? (
         <p className="rounded-xl border border-zinc-800 bg-black px-5 py-10 text-center text-sm text-zinc-400">
           {emptyMessage}
         </p>
       ) : (
         <section aria-label="Manchetes" className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {visibleArticles.map((article) => (
-            <article
-              key={article.id}
-              className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black transition-colors duration-200 hover:border-emerald-500/50"
-            >
-              {article.image ? (
-                <img
-                  src={article.image}
-                  alt=""
-                  className="h-48 w-full bg-zinc-900 object-cover"
-                />
-              ) : (
-                <div className="flex h-48 w-full items-center justify-center bg-zinc-900 text-zinc-600">
-                  <Newspaper className="size-8" aria-hidden="true" />
+          {articles.map((article) => {
+            const title = article.title?.trim() ?? "";
+            const url = article.url?.trim() ?? "";
+            const description = article.description?.trim() || "Sem resumo disponível.";
+            const source = article.source?.name?.trim() || "Fonte desconhecida";
+            const publishedAt = article.publishedAt?.trim() || "";
+
+            return (
+              <article
+                key={url}
+                className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black transition-colors duration-200 hover:border-emerald-500/50"
+              >
+                <ArticleCover src={article.urlToImage} />
+                <div className="flex flex-1 flex-col p-5">
+                  <p className="text-sm text-zinc-400">
+                    {source}
+                    <span aria-hidden="true"> · </span>
+                    <time dateTime={publishedAt || undefined}>{formatRelativeTime(publishedAt)}</time>
+                  </p>
+                  <h2 className="mt-2 line-clamp-2 text-lg font-semibold text-zinc-100">{title}</h2>
+                  <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{description}</p>
+                  <div className="mt-4 border-t border-zinc-800/50 pt-4">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-emerald-400 transition-colors duration-200 hover:text-emerald-300"
+                    >
+                      Ler artigo completo -&gt;
+                    </a>
+                  </div>
                 </div>
-              )}
-              <div className="flex flex-1 flex-col p-5">
-                <p className="text-sm text-zinc-400">
-                  {article.source}
-                  <span aria-hidden="true"> · </span>
-                  <time dateTime={article.publishedAt}>{formatRelativeTime(article.publishedAt)}</time>
-                </p>
-                <h2 className="mt-2 line-clamp-2 text-lg font-semibold text-zinc-100">
-                  {article.title}
-                </h2>
-                <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{article.summary}</p>
-                <div className="mt-4 border-t border-zinc-800/50 pt-4">
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm font-medium text-emerald-400 transition-colors duration-200 hover:text-emerald-300"
-                  >
-                    Ler artigo completo -&gt;
-                  </a>
-                </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </section>
       )}
     </div>

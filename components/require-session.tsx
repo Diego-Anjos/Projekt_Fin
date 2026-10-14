@@ -1,6 +1,7 @@
 "use client";
 
 import { account } from "@/lib/appwrite/client";
+import { usePreferences } from "@/contexts/preferences-context";
 import type { Models } from "appwrite";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -8,6 +9,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 type SessionContextValue = {
   user: Models.User;
   logout: () => Promise<void>;
+  syncUser: (nextUser: Models.User) => void;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -24,6 +26,7 @@ export function useSession() {
 
 export function RequireSession({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { applyRemotePrefs } = usePreferences();
   const [user, setUser] = useState<Models.User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +37,7 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
       try {
         const currentUser = await account.get();
         if (active) {
+          applyRemotePrefs(currentUser.prefs);
           setUser(currentUser);
         }
       } catch {
@@ -50,12 +54,16 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [applyRemotePrefs, router]);
 
   async function logout() {
     await account.deleteSession("current");
     router.replace("/");
     router.refresh();
+  }
+
+  function syncUser(nextUser: Models.User) {
+    setUser(nextUser);
   }
 
   if (loading || !user) {
@@ -73,7 +81,7 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ user, logout }}>
+    <SessionContext.Provider value={{ user, logout, syncUser }}>
       {children}
     </SessionContext.Provider>
   );

@@ -1,22 +1,14 @@
 "use client";
 
 import { useSession } from "@/components/require-session";
-import { createTransaction, updateTransaction } from "@/lib/appwrite/database";
-import { formatCurrencyInput, parseCurrencyToNumber } from "@/lib/utils";
-import { X } from "lucide-react";
+import { CustomDatePicker, parseCalendarDate, toCalendarIso } from "@/components/ui/custom-date-picker";
+import { usePreferences } from "@/contexts/preferences-context";
+import { createTransaction, getCategories, updateTransaction, type CategoryDocument } from "@/lib/appwrite/database";
+import { getCategoryIcon } from "@/lib/category-utils";
+import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
+import { ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
-
-const categories = [
-  "Alimentação",
-  "Moradia",
-  "Transporte",
-  "Assinaturas",
-  "Salário",
-  "Lazer",
-  "Saúde",
-  "Outros",
-];
+import { createElement, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 
 export type TransactionType = "income" | "expense";
 export type TransactionStatus = "Paid" | "Pending";
@@ -31,13 +23,15 @@ export type PurchaseTransaction = {
   status: TransactionStatus;
 };
 
+function CategoryGlyph({ name, className }: { name: string; className?: string }) {
+  return createElement(getCategoryIcon(name), {
+    className,
+    "aria-hidden": true,
+  });
+}
+
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
-
-function toDateInputValue(isoDate: string) {
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(isoDate);
-  return match?.[1] ?? "";
-}
 
 function collectValidationErrors(form: HTMLFormElement) {
   const errors: Record<string, string> = {};
@@ -83,27 +77,90 @@ function TransactionModalForm({
   onClose,
   onSave,
 }: Omit<TransactionModalProps, "open">) {
+  const { currency } = usePreferences();
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [amount, setAmount] = useState(
-    transaction ? formatCurrencyInput(Math.round(transaction.amount * 100)) : "",
+    transaction ? formatCurrencyInput(Math.round(transaction.amount * 100), currency) : "",
   );
   const [description, setDescription] = useState(transaction?.description ?? "");
   const [category, setCategory] = useState(transaction?.category ?? "");
-  const [date, setDate] = useState(transaction ? toDateInputValue(transaction.date) : "");
+  const [categoryOptions, setCategoryOptions] = useState<CategoryDocument[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+  const [date, setDate] = useState<Date | null>(
+    transaction ? parseCalendarDate(transaction.date) : null,
+  );
   const [status, setStatus] = useState<TransactionStatus>(transaction?.status ?? "Paid");
   const [amountError, setAmountError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useSession();
+  const categoriesUnavailable = !categoriesLoading && categoryOptions.length === 0;
+  const categoryNames = categoryOptions.map((item) => item.name);
+  const visibleCategories =
+    category && !categoryNames.some((name) => name.localeCompare(category, "pt-BR", { sensitivity: "accent" }) === 0)
+      ? [category, ...categoryNames]
+      : categoryNames;
+
+  useEffect(() => {
+    setAmount((current) => (current ? formatCurrencyInput(current, currency) : current));
+  }, [currency]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function fetchCategories() {
+      try {
+        const documents = await getCategories(user.$id);
+        if (!active) return;
+
+        if (documents.length === 0) {
+          setCategoryOptions([]);
+          return;
+        }
+
+        setCategoryOptions(documents);
+      } catch (error) {
+        if (!active) return;
+        console.error("Falha ao carregar as categorias.", error);
+        toast.error("Não foi possível carregar as categorias.");
+      } finally {
+        if (active) setCategoriesLoading(false);
+      }
+    }
+
+    void fetchCategories();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (!categoryMenuRef.current?.contains(event.target as Node)) {
+        setIsCategoryOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && document.querySelector(".react-datepicker")) return;
+      if (event.key === "Escape" && isCategoryOpen) {
+        setIsCategoryOpen(false);
+        return;
+      }
       if (event.key === "Escape") onClose();
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [isCategoryOpen, onClose]);
 
   function handleSaveClick(event: MouseEvent<HTMLButtonElement>) {
     console.log("--- CLIQUE NO BOTÃO SALVAR ---");
@@ -128,7 +185,15 @@ function TransactionModalForm({
       errors.amount = "Informe um valor maior que zero.";
     }
 
-    if (Object.keys(errors).length > 0) {
+    if (!date) {
+      errors.date = "Informe a data da transação.";
+    }
+
+    if (!category) {
+      errors.category = "Selecione uma categoria.";
+    }
+
+    if (Object.keys(errors).length > 0 || !date) {
       setAmountError(errors.amount ?? "");
       setSubmitError(Object.values(errors).join(" "));
       return;
@@ -146,7 +211,7 @@ function TransactionModalForm({
       type,
       description: description.trim(),
       category,
-      date,
+      date: toCalendarIso(date),
       amount: parsedAmount,
       status,
     };
@@ -247,23 +312,27 @@ function TransactionModalForm({
           </fieldset>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Valor (R$)</span>
+            <span className="text-sm font-medium text-zinc-300">
+              Valor ({getCurrencySymbol(currency)})
+            </span>
             <span className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 transition-colors duration-200 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
-              <span className="text-xl font-medium text-zinc-500">R$</span>
+              <span className="text-xl font-medium text-emerald-400 select-none">
+                {getCurrencySymbol(currency)}
+              </span>
               <input
                 type="text"
                 name="amount"
                 inputMode="numeric"
                 value={amount}
                 onChange={(event) => {
-                  const formatted = formatCurrencyInput(event.target.value);
+                  const formatted = formatCurrencyInput(event.target.value, currency);
                   event.target.value = formatted;
                   const end = formatted.length;
                   event.target.setSelectionRange(end, end);
                   setAmount(formatted);
                   setAmountError("");
                 }}
-                placeholder="0,00"
+                placeholder={currency === "USD" ? "0.00" : "0,00"}
                 required
                 aria-invalid={amountError ? true : undefined}
                 className="w-full bg-transparent text-4xl font-semibold tracking-tight text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-600"
@@ -274,13 +343,12 @@ function TransactionModalForm({
 
           <label className="flex h-full flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">Data da Transação</span>
-            <input
-              type="date"
+            <CustomDatePicker
               name="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
+              selected={date}
+              onChange={setDate}
               required
-              className={`${fieldClassName} mt-auto [color-scheme:dark]`}
+              className="mt-auto"
             />
           </label>
 
@@ -297,25 +365,75 @@ function TransactionModalForm({
             />
           </label>
 
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Categoria</span>
-            <select
-              name="category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              required
-              className={`${fieldClassName} [color-scheme:dark]`}
-            >
-              <option value="" disabled>
-                Selecione uma categoria
-              </option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex flex-col gap-2">
+            <span id="transaction-category-label" className="text-sm font-medium text-zinc-300">
+              Categoria
+            </span>
+            <div ref={categoryMenuRef} className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={isCategoryOpen}
+                aria-labelledby="transaction-category-label"
+                disabled={categoriesUnavailable}
+                onClick={() => setIsCategoryOpen((open) => !open)}
+                className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-emerald-500/30 bg-black/40 px-4 py-3 text-left text-slate-300 transition-colors focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {categoriesUnavailable ? (
+                  <span>Nenhuma categoria. Cadastre em Configurações</span>
+                ) : category ? (
+                  <span className="flex items-center gap-3">
+                    <CategoryGlyph name={category} className="size-4 shrink-0 text-emerald-400" />
+                    {category}
+                  </span>
+                ) : (
+                  <span>Selecione uma categoria</span>
+                )}
+                <ChevronDown
+                  className={`size-4 shrink-0 transition-transform ${isCategoryOpen ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
+              </button>
+              {isCategoryOpen ? (
+                <div
+                  role="listbox"
+                  aria-labelledby="transaction-category-label"
+                  className="absolute top-full z-50 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-emerald-500/30 bg-[#0a110e] shadow-2xl"
+                >
+                  {categoriesLoading ? (
+                    <p className="px-4 py-3 text-sm text-zinc-500">A carregar categorias...</p>
+                  ) : visibleCategories.length === 0 ? (
+                    <p className="px-4 py-3 text-sm text-zinc-500">
+                      Nenhuma categoria. Cadastre em Configurações
+                    </p>
+                  ) : (
+                    visibleCategories.map((name) => {
+                      const isSelected = name === category;
+
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setCategory(name);
+                            setIsCategoryOpen(false);
+                          }}
+                          className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 ${
+                            isSelected ? "text-emerald-400" : "text-slate-300 hover:text-emerald-400"
+                          }`}
+                        >
+                          <CategoryGlyph name={name} className="size-4 shrink-0" />
+                          {name}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
 
           <fieldset className="col-span-1 md:col-span-2">
             <legend className="mb-3 text-sm font-medium text-zinc-300">Status</legend>

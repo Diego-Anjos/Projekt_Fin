@@ -1,3 +1,6 @@
+"use client";
+
+import { usePreferences } from "@/contexts/preferences-context";
 import type { DashboardKpis } from "@/types/dashboard";
 
 function valueTone(value: number) {
@@ -19,6 +22,8 @@ export function PortfolioKPIs({
   kpis: DashboardKpis;
   formatCurrency: (value: number) => string;
 }) {
+  const { privacyMode } = usePreferences();
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
@@ -28,23 +33,34 @@ export function PortfolioKPIs({
             {formatCurrency(kpis.totalWealth)}
           </p>
           <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold ${growthBadgeTone(kpis.wealthGrowth)}`}
+            className={`rounded-full px-2 py-1 text-xs font-semibold ${
+              privacyMode ? "bg-zinc-500/15 text-zinc-400" : growthBadgeTone(kpis.wealthGrowth)
+            }`}
           >
-            {kpis.wealthGrowth}
+            {privacyMode ? "••••" : kpis.wealthGrowth}
           </span>
         </div>
       </article>
 
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">Monthly Cash Flow</p>
-        <p className={`mt-4 text-3xl font-semibold tracking-tight ${valueTone(kpis.monthlyCashFlow)}`}>
-          +{formatCurrency(kpis.monthlyCashFlow)}
+        <p
+          className={`mt-4 text-3xl font-semibold tracking-tight ${
+            privacyMode ? "text-zinc-100" : valueTone(kpis.monthlyCashFlow)
+          }`}
+        >
+          {privacyMode ? "" : "+"}
+          {formatCurrency(kpis.monthlyCashFlow)}
         </p>
       </article>
 
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">Gastos do Mês Atual</p>
-        <p className="mt-4 text-3xl font-semibold tracking-tight text-red-500">
+        <p
+          className={`mt-4 text-3xl font-semibold tracking-tight ${
+            privacyMode ? "text-zinc-100" : "text-red-500"
+          }`}
+        >
           {formatCurrency(kpis.monthlyExpenses)}
         </p>
       </article>

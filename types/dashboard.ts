@@ -21,9 +21,3 @@ export interface Subscription {
   amount: number;
   renewalDate: string;
 }
-
-export type MonthlyComparisonPoint = {
-  mes: string;
-  gastos: number;
-  economia: number;
-};

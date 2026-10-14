@@ -5,27 +5,18 @@ import { DashboardSessionBar } from "@/components/dashboard-session-bar";
 import { MarketHubCards } from "@/components/market-hub-cards";
 import { NewsTickerCard } from "@/components/NewsTickerCard";
 import { PortfolioKPIs } from "@/components/portfolio-kpis";
-import { PortfolioPerformance } from "@/components/portfolio-performance";
 import { useSession } from "@/components/require-session";
 import { RecentTransactions } from "@/components/recent-transactions";
 import { RecurringSubscriptions } from "@/components/recurring-subscriptions";
+import { usePreferences } from "@/contexts/preferences-context";
+import { formatCurrency } from "@/lib/utils";
 import {
   getSubscriptions,
   getTransactions,
   type SubscriptionDocument,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
-import { buildMonthlyComparison } from "@/lib/monthly-comparison";
-import type { DashboardKpis, MonthlyComparisonPoint, Subscription, Transaction } from "@/types/dashboard";
-
-const contributionLevels = [
-  [0, 1, 2, 1, 3, 2, 0, 1, 2, 3, 1, 0, 2, 1, 3, 2, 0, 1],
-  [1, 2, 0, 3, 1, 2, 3, 0, 1, 2, 3, 2, 1, 0, 2, 3, 1, 2],
-  [2, 0, 1, 2, 3, 1, 0, 2, 3, 1, 0, 1, 3, 2, 1, 0, 2, 3],
-  [0, 3, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 3, 0, 1, 2, 0, 1],
-];
-
-const contributionTones = ["bg-zinc-800", "bg-emerald-800", "bg-emerald-600", "bg-emerald-400"];
+import type { DashboardKpis, Subscription, Transaction } from "@/types/dashboard";
 
 function formatDashboardDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -89,6 +80,7 @@ function computeCashKpis(documents: TransactionDocument[]) {
 
 export default function Home() {
   const { user } = useSession();
+  const { currency, privacyMode } = usePreferences();
   const [kpis, setKpis] = useState<DashboardKpis>({
     totalWealth: 0,
     wealthGrowth: "0%",
@@ -98,7 +90,6 @@ export default function Home() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [comparison, setComparison] = useState<MonthlyComparisonPoint[]>(() => buildMonthlyComparison([]));
 
   useEffect(() => {
     let active = true;
@@ -114,7 +105,6 @@ export default function Home() {
 
         setTransactions(transactionsResponse.documents.slice(0, 10).map(toDashboardTransaction));
         setSubscriptions(subscriptionsResponse.documents.map(toDashboardSubscription));
-        setComparison(buildMonthlyComparison(transactionsResponse.documents));
         setKpis((current) => ({
           ...current,
           ...computeCashKpis(transactionsResponse.documents),
@@ -131,9 +121,7 @@ export default function Home() {
     };
   }, [user.$id]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-  };
+  const formatMoney = (value: number) => formatCurrency(value, currency, privacyMode);
 
   return (
     <div className="flex min-h-full flex-col gap-8 p-6">
@@ -147,39 +135,13 @@ export default function Home() {
         <h2 id="portfolio-kpis-heading" className="text-base font-semibold text-zinc-100">
           Portfolio KPIs
         </h2>
-        <PortfolioKPIs kpis={kpis} formatCurrency={formatCurrency} />
+        <PortfolioKPIs kpis={kpis} formatCurrency={formatMoney} />
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <PortfolioPerformance data={comparison} />
-          <TradesHeatmap />
+          <RecentTransactions transactions={transactions} formatCurrency={formatMoney} />
+          <RecurringSubscriptions subscriptions={subscriptions} formatCurrency={formatMoney} />
         </div>
       </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
-        <RecurringSubscriptions subscriptions={subscriptions} formatCurrency={formatCurrency} />
-      </section>
     </div>
-  );
-}
-
-function TradesHeatmap() {
-  return (
-    <article className="rounded-xl border border-zinc-700/50 bg-black p-4">
-      <h3 className="text-sm font-semibold text-zinc-100">Ações & FIIs</h3>
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-zinc-100">
-        260 <span className="text-base font-medium text-zinc-400">trades</span>
-      </p>
-      <div className="mt-5 grid w-full grid-flow-col grid-rows-4 gap-1" aria-hidden="true">
-        {contributionLevels[0].map((_, column) =>
-          contributionLevels.map((row, rowIndex) => (
-            <span
-              key={`${column}-${rowIndex}`}
-              className={`size-4 rounded-[3px] ${contributionTones[row[column]]}`}
-            />
-          )),
-        )}
-      </div>
-    </article>
   );
 }
 

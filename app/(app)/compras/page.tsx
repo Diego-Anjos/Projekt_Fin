@@ -3,15 +3,12 @@
 import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
+import { usePreferences } from "@/contexts/preferences-context";
 import { deleteTransaction, getTransactions, type TransactionDocument } from "@/lib/appwrite/database";
+import { formatCurrency } from "@/lib/utils";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
 
 const controlClassName =
   "h-11 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
@@ -57,6 +54,7 @@ const statusLabel = {
 export default function ComprasPage() {
   const { user } = useSession();
   const { confirm } = useConfirm();
+  const { currency, privacyMode } = usePreferences();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,11 +284,16 @@ export default function ComprasPage() {
                     <td className="px-5 py-4 text-zinc-400">{formatDate(transaction.date)}</td>
                     <td
                       className={`px-5 py-4 text-right font-semibold tabular-nums ${
-                        transaction.type === "income" ? "text-emerald-400" : "text-red-400"
+                        privacyMode
+                          ? "text-zinc-300"
+                          : transaction.type === "income"
+                            ? "text-emerald-400"
+                            : "text-red-400"
                       }`}
                     >
-                      {transaction.type === "income" ? "+" : "−"}{" "}
-                      {currencyFormatter.format(transaction.amount)}
+                      {privacyMode
+                        ? formatCurrency(transaction.amount, currency, true)
+                        : `${transaction.type === "income" ? "+" : "−"} ${formatCurrency(transaction.amount, currency, false)}`}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-1">

@@ -1,5 +1,13 @@
+/**
+ * Collection "Categories" no Database do Appwrite:
+ * 1. Crie a collection com o nome Categories.
+ * 2. Atributos: "name" (string, required) e "userId" (string, required).
+ * 3. Index em "userId", para filtrar as categorias do utilizador autenticado.
+ * 4. Permissões da collection: Users ou Any, com Create, Read, Update e Delete.
+ * 5. Copie o ID da collection para NEXT_PUBLIC_APPWRITE_CATEGORIES_COLLECTION_ID.
+ */
 import { ID, Permission, Query, Role, type Models } from "appwrite";
-import { appwriteConfig, databases } from "@/lib/appwrite/client";
+import { appwriteCategoriesCollectionId, appwriteConfig, databases } from "@/lib/appwrite/client";
 
 export type TransactionDocument = Models.Document & {
   userId: string;
@@ -112,6 +120,57 @@ export async function updateTransaction(documentId: string, data: TransactionInp
     appwriteConfig.transactionsCollectionId,
     documentId,
     toTransactionPayload(data),
+  );
+}
+
+export type CategoryDocument = Models.Document & {
+  userId: string;
+  name: string;
+};
+
+function categoriesCollectionId() {
+  if (!appwriteCategoriesCollectionId) {
+    throw new Error(
+      "Defina NEXT_PUBLIC_APPWRITE_CATEGORIES_COLLECTION_ID com o ID da collection Categories.",
+    );
+  }
+  return appwriteCategoriesCollectionId;
+}
+
+export async function getCategories(userId: string) {
+  if (!appwriteCategoriesCollectionId) return [];
+
+  const response = await databases.listDocuments<CategoryDocument>(
+    appwriteConfig.databaseId,
+    appwriteCategoriesCollectionId,
+    [Query.equal("userId", userId), Query.limit(100)],
+  );
+
+  if (response.documents.length === 0) return [];
+
+  return [...response.documents].sort((left, right) =>
+    left.name.localeCompare(right.name, "pt-BR"),
+  );
+}
+
+export async function createCategory(userId: string, name: string) {
+  return databases.createDocument<CategoryDocument>(
+    appwriteConfig.databaseId,
+    categoriesCollectionId(),
+    ID.unique(),
+    {
+      name,
+      userId,
+    },
+    ownerPermissions(userId),
+  );
+}
+
+export async function deleteCategory(documentId: string) {
+  return databases.deleteDocument(
+    appwriteConfig.databaseId,
+    categoriesCollectionId(),
+    documentId,
   );
 }
 

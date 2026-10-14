@@ -1,62 +1,27 @@
 "use client";
 
+import { SpendingHeatmap } from "@/components/spending-heatmap";
+import { CategoryBubbleChart, type CategoryBubble } from "@/components/ui/category-bubble-chart";
 import { useSession } from "@/components/require-session";
+import { usePreferences } from "@/contexts/preferences-context";
 import { getAllTransactions, type TransactionDocument } from "@/lib/appwrite/database";
-import {
-  expenseCategories,
-  monthOptions,
-  monthValue,
-  sixMonthSeries,
-  sumByType,
-  type CashTransaction,
-} from "@/lib/cash-flow";
+import { dailyExpenses, expenseCategories, monthOptions, monthValue, sumByType, type CashTransaction } from "@/lib/cash-flow";
+import { getCategoryIcon, normalizeCategoryName } from "@/lib/category-utils";
+import { formatCurrency } from "@/lib/utils";
 import { ArrowDown, ArrowUp, Scale } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
-const axisFormatter = new Intl.NumberFormat("pt-BR", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const percentFormatter = new Intl.NumberFormat("pt-BR", {
-  maximumFractionDigits: 0,
-});
+const CATEGORY_PALETTE = ["#f97316", "#8b5cf6", "#eab308", "#0ea5e9", "#10b981", "#f472b6", "#22d3ee", "#a3e635"];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Moradia: "#10b981",
-  Alimentação: "#3b82f6",
-  Lazer: "#a855f7",
-  Transporte: "#f97316",
-  Assinaturas: "#ef4444",
-  Saúde: "#14b8a6",
-  Salário: "#eab308",
-  Outros: "#71717a",
-};
-
-const EXTRA_COLORS = ["#22d3ee", "#f472b6", "#818cf8", "#84cc16", "#fb923c"];
-
-const tooltipStyle = {
-  backgroundColor: "#18181b",
-  border: "1px solid #27272a",
-  borderRadius: 8,
-  fontSize: 12,
+  transporte: "#f97316",
+  lazer: "#8b5cf6",
+  outros: "#a3e635",
+  alimentacao: "#0ea5e9",
+  moradia: "#10b981",
+  saude: "#14b8a6",
+  assinaturas: "#f472b6",
+  salario: "#eab308",
 };
 
 function toCashTransaction(document: TransactionDocument): CashTransaction {
@@ -77,19 +42,26 @@ function formatMonthYear(year: number, month: number) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function formatSignedCurrency(value: number) {
-  const formatted = currencyFormatter.format(Math.abs(value));
+function formatMonthName(year: number, month: number) {
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(year, month, 1));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatSignedCurrency(value: number, currency: string, privacyMode: boolean) {
+  if (privacyMode) return formatCurrency(value, currency, true);
+  const formatted = formatCurrency(Math.abs(value), currency, false);
   if (value > 0) return `+ ${formatted}`;
   if (value < 0) return `- ${formatted}`;
   return formatted;
 }
 
 function categoryColor(name: string, index: number) {
-  return CATEGORY_COLORS[name] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
+  return CATEGORY_COLORS[normalizeCategoryName(name)] ?? CATEGORY_PALETTE[index % CATEGORY_PALETTE.length];
 }
 
 export default function CashFlowPage() {
   const { user } = useSession();
+  const { currency, privacyMode } = usePreferences();
   const [today] = useState(() => new Date());
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
@@ -140,23 +112,32 @@ export default function CashFlowPage() {
     return Object.is(net, -0) ? 0 : net;
   }, [income, expense]);
 
-  const barData = useMemo(
-    () => sixMonthSeries(transactions, year, month),
+  const heatmapDays = useMemo(
+    () => dailyExpenses(transactions, year, month),
     [transactions, year, month],
   );
-  const pieData = useMemo(
+  const bubbleData = useMemo<CategoryBubble[]>(
     () =>
       expenseCategories(transactions, year, month).map((category, index) => ({
-        ...category,
+        id: category.name,
+        name: category.name,
+        value: category.value,
+        icon: getCategoryIcon(category.name),
         color: categoryColor(category.name, index),
       })),
     [transactions, year, month],
   );
 
-  const balanceTone =
-    balance > 0 ? "text-emerald-400" : balance < 0 ? "text-rose-400" : "text-zinc-100";
-  const balanceIconTone =
-    balance > 0
+  const balanceTone = privacyMode
+    ? "text-zinc-100"
+    : balance > 0
+      ? "text-emerald-400"
+      : balance < 0
+        ? "text-rose-400"
+        : "text-zinc-100";
+  const balanceIconTone = privacyMode
+    ? "bg-zinc-800 text-zinc-400"
+    : balance > 0
       ? "bg-emerald-500/15 text-emerald-400"
       : balance < 0
         ? "bg-rose-500/15 text-rose-400"
@@ -219,7 +200,7 @@ export default function CashFlowPage() {
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
             <p className="mt-4 text-2xl font-semibold tracking-tight text-emerald-500">
-              {currencyFormatter.format(income)}
+              {formatCurrency(income, currency, privacyMode)}
             </p>
           )}
         </article>
@@ -238,7 +219,7 @@ export default function CashFlowPage() {
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
             <p className="mt-4 text-2xl font-semibold tracking-tight text-red-500">
-              {currencyFormatter.format(expense)}
+              {formatCurrency(expense, currency, privacyMode)}
             </p>
           )}
         </article>
@@ -254,126 +235,44 @@ export default function CashFlowPage() {
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
             <p className={`mt-4 text-2xl font-semibold tracking-tight ${balanceTone}`}>
-              {formatSignedCurrency(balance)}
+              {formatSignedCurrency(balance, currency, privacyMode)}
             </p>
           )}
         </article>
       </section>
 
       <section aria-label="Análise gráfica" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-zinc-100">
-              Entradas vs Saídas (Últimos 6 meses)
-            </h2>
-            <ul className="flex items-center gap-4 text-xs text-zinc-400">
-              <li className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm bg-emerald-500" aria-hidden="true" />
-                Entrada
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm bg-red-500" aria-hidden="true" />
-                Saída
-              </li>
-            </ul>
-          </div>
-          {loading ? (
-            <div className="mt-4 h-72 animate-pulse rounded-lg bg-zinc-900" />
-          ) : (
-            <div className="mt-4 h-72" role="img" aria-label="Gráfico de barras de entradas e saídas dos últimos meses">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={4}>
-                  <CartesianGrid vertical={false} stroke="#27272a" />
-                  <XAxis
-                    dataKey="mes"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#a1a1aa", fontSize: 12 }}
-                    dy={8}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#a1a1aa", fontSize: 12 }}
-                    width={48}
-                    tickFormatter={(value: number) => axisFormatter.format(value)}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "#27272a" }}
-                    contentStyle={tooltipStyle}
-                    labelStyle={{ color: "#a1a1aa" }}
-                    formatter={(value, name) => [
-                      currencyFormatter.format(Number(value)),
-                      String(name),
-                    ]}
-                  />
-                  <Bar dataKey="Entrada" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="Saída" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </article>
+        <SpendingHeatmap
+          monthLabel={formatMonthName(year, month)}
+          total={expense}
+          days={heatmapDays}
+          currency={currency}
+          privacyMode={privacyMode}
+          loading={loading}
+        />
 
-        <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
-          <h2 className="text-base font-semibold text-zinc-100">
-            Despesas por Categoria (Neste mês)
-          </h2>
+        <article aria-label="Despesas por categoria" className="rounded-xl border border-zinc-700/50 bg-black p-5">
           {loading ? (
-            <div className="mt-4 h-64 animate-pulse rounded-lg bg-zinc-900" />
-          ) : pieData.length === 0 ? (
-            <p className="mt-4 flex h-64 items-center justify-center text-center text-sm text-zinc-400">
+            <div className="flex flex-col items-center">
+              <div className="size-[300px] max-w-full animate-pulse rounded-full bg-zinc-900" />
+              <div className="mt-6 h-4 w-44 animate-pulse rounded bg-zinc-900" />
+              <div className="mt-3 h-9 w-40 animate-pulse rounded bg-zinc-900" />
+            </div>
+          ) : bubbleData.length === 0 ? (
+            <p className="flex h-64 items-center justify-center text-center text-sm text-zinc-400">
               Nenhuma despesa registrada neste mês
             </p>
           ) : (
-            <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
-              <div
-                className="h-64 w-full sm:w-1/2"
-                role="img"
-                aria-label="Gráfico de pizza das despesas por categoria neste mês"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={58}
-                      outerRadius={88}
-                      paddingAngle={3}
-                      stroke="#18181b"
-                    >
-                      {pieData.map((slice) => (
-                        <Cell key={slice.name} fill={slice.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      itemStyle={{ color: "#f4f4f5" }}
-                      formatter={(value, name) => [currencyFormatter.format(Number(value)), String(name)]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+            <div className="flex flex-col items-center">
+              <div className="mx-auto w-full max-w-[300px]">
+                <CategoryBubbleChart data={bubbleData} />
               </div>
-              <ul className="flex w-full flex-col gap-3 sm:w-1/2">
-                {pieData.map((slice) => (
-                  <li key={slice.name} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="size-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: slice.color }}
-                        aria-hidden="true"
-                      />
-                      <span className="truncate text-zinc-200">{slice.name}</span>
-                    </span>
-                    <span className="shrink-0 font-medium text-zinc-400">
-                      {percentFormatter.format(slice.percent)}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-6 text-center text-slate-400">
+                Gastos no mês de {formatMonthName(year, month)}
+              </p>
+              <p className="mt-2 text-center text-3xl font-bold text-white">
+                {formatCurrency(expense, currency, privacyMode)}
+              </p>
             </div>
           )}
         </article>

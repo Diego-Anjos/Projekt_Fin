@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { AmbientBackground } from "@/components/AmbientBackground";
 import { ConfirmDialogProvider } from "@/contexts/confirm-dialog-context";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { PreferencesProvider } from "@/contexts/preferences-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,7 +38,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="pointer-events-none fixed top-[40%] left-[30%] -z-10 h-[30%] w-[30%] rounded-full bg-emerald-500/10 blur-[120px]" />
         <AmbientBackground />
         <LanguageProvider>
-          <ConfirmDialogProvider>
+          <PreferencesProvider>
+            <ConfirmDialogProvider>
             {children}
             <Toaster
               position="top-center"
@@ -61,7 +63,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               }}
               style={{ "--width": "28rem" }}
             />
-          </ConfirmDialogProvider>
+            </ConfirmDialogProvider>
+          </PreferencesProvider>
         </LanguageProvider>
       </body>
     </html>

@@ -22,6 +22,11 @@ export type CategoryTotal = {
   percent: number;
 };
 
+export type DailyExpense = {
+  day: number;
+  amount: number;
+};
+
 const shortMonths = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export function roundCurrency(value: number) {
@@ -40,6 +45,21 @@ export function readMonth(dateValue: string): MonthPoint | null {
   const parsed = new Date(dateValue);
   if (Number.isNaN(parsed.getTime())) return null;
   return { year: parsed.getFullYear(), month: parsed.getMonth() };
+}
+
+export function daysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function readCalendarDay(dateValue: string): (MonthPoint & { day: number }) | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue);
+  if (!match) return null;
+
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+
+  return { year: Number(match[1]), month, day };
 }
 
 export function addMonths(year: number, month: number, delta: number): MonthPoint {
@@ -106,6 +126,29 @@ export function expenseCategories(
   return entries.map((entry) => ({
     ...entry,
     percent: total > 0 ? (entry.value / total) * 100 : 0,
+  }));
+}
+
+export function dailyExpenses(
+  transactions: CashTransaction[],
+  year: number,
+  month: number,
+): DailyExpense[] {
+  const length = daysInMonth(year, month);
+  const totals = Array.from({ length }, () => 0);
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "expense") continue;
+
+    const point = readCalendarDay(transaction.date);
+    if (!point || point.year !== year || point.month !== month || point.day > length) continue;
+
+    totals[point.day - 1] += finiteAmount(transaction.amount);
+  }
+
+  return totals.map((amount, index) => ({
+    day: index + 1,
+    amount: roundCurrency(amount),
   }));
 }
 
