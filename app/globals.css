@@ -124,3 +124,30 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@keyframes pf-chat-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pf-chat-rise {
+  animation: pf-chat-rise 320ms ease-out;
+}
