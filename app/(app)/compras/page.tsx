@@ -156,8 +156,8 @@ export default function ComprasPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-6 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-8 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex w-full flex-col gap-4 md:gap-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
         <div className="flex items-center gap-6">
           <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-emerald-800/40 bg-emerald-500/10 text-emerald-400">
             <Receipt className="size-8" aria-hidden="true" />
@@ -232,15 +232,15 @@ export default function ComprasPage() {
 
       <div className="overflow-hidden rounded-2xl border border-zinc-700/50 bg-black">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-xs tracking-wide text-zinc-400 uppercase">
-                <th className="px-5 py-4 font-medium">Situação</th>
-                <th className="px-5 py-4 font-medium">Descrição</th>
-                <th className="px-5 py-4 font-medium">Categoria</th>
-                <th className="px-5 py-4 font-medium">Data</th>
-                <th className="px-5 py-4 text-right font-medium">Valor</th>
-                <th className="px-5 py-4 text-right font-medium">Ações</th>
+                <th className="w-[22%] px-3 py-3 font-medium md:px-5 md:py-4">Situação</th>
+                <th className="w-[34%] px-3 py-3 font-medium md:px-5 md:py-4">Descrição</th>
+                <th className="hidden w-[16%] px-3 py-3 font-medium sm:table-cell md:px-5 md:py-4">Categoria</th>
+                <th className="hidden w-[14%] px-3 py-3 font-medium md:table-cell md:px-5 md:py-4">Data</th>
+                <th className="w-[24%] px-3 py-3 text-right font-medium md:px-5 md:py-4">Valor</th>
+                <th className="w-[20%] px-3 py-3 text-right font-medium md:px-5 md:py-4">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -268,7 +268,7 @@ export default function ComprasPage() {
                     key={transaction.id}
                     className="border-b border-zinc-800 transition-colors duration-200 last:border-b-0 hover:bg-zinc-800/40"
                   >
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-3 md:px-5 md:py-4">
                       <span
                         className={
                           transaction.status === "Paid"
@@ -279,11 +279,11 @@ export default function ComprasPage() {
                         {statusLabel[transaction.status]}
                       </span>
                     </td>
-                    <td className="px-5 py-4 font-medium text-zinc-100">{transaction.description}</td>
-                    <td className="px-5 py-4 text-zinc-300">{transaction.category}</td>
-                    <td className="px-5 py-4 text-zinc-400">{formatDate(transaction.date)}</td>
+                    <td className="max-w-0 truncate px-3 py-3 font-medium text-zinc-100 md:px-5 md:py-4">{transaction.description}</td>
+                    <td className="hidden max-w-0 truncate px-3 py-3 text-zinc-300 sm:table-cell md:px-5 md:py-4">{transaction.category}</td>
+                    <td className="hidden px-3 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-5 md:py-4">{formatDate(transaction.date)}</td>
                     <td
-                      className={`px-5 py-4 text-right font-semibold tabular-nums ${
+                      className={`px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums md:px-5 md:py-4 ${
                         privacyMode
                           ? "text-zinc-300"
                           : transaction.type === "income"
@@ -295,7 +295,7 @@ export default function ComprasPage() {
                         ? formatCurrency(transaction.amount, currency, true)
                         : `${transaction.type === "income" ? "+" : "−"} ${formatCurrency(transaction.amount, currency, false)}`}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 py-3 md:px-5 md:py-4">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"

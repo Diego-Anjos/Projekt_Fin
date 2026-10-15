@@ -156,8 +156,8 @@ export default function CashFlowPage() {
     : [{ year, month }, ...options];
 
   return (
-    <div className="flex w-full flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-6 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-8 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex w-full flex-col gap-4 md:gap-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
             Fluxo de Caixa
@@ -172,7 +172,7 @@ export default function CashFlowPage() {
             value={selectedValue}
             onChange={(event) => selectMonth(event.target.value)}
             aria-label="Selecionar mês e ano"
-            className="h-11 min-w-44 rounded-lg border border-emerald-800/50 bg-[#041610] px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            className="h-11 w-full min-w-0 rounded-lg border border-emerald-800/50 bg-[#041610] px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 sm:w-auto sm:min-w-44"
           >
             {monthChoices.map((option) => (
               <option key={monthValue(option)} value={monthValue(option)}>
@@ -185,7 +185,7 @@ export default function CashFlowPage() {
 
       {error ? <p className="text-sm text-rose-400">{error}</p> : null}
 
-      <section aria-label="Resumo mensal" aria-busy={loading} className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <section aria-label="Resumo mensal" aria-busy={loading} className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -199,7 +199,7 @@ export default function CashFlowPage() {
           {loading ? (
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
-            <p className="mt-4 text-2xl font-semibold tracking-tight text-emerald-500">
+            <p className="mt-4 text-xl font-semibold tracking-tight break-words text-emerald-500 sm:text-2xl">
               {formatCurrency(income, currency, privacyMode)}
             </p>
           )}
@@ -218,7 +218,7 @@ export default function CashFlowPage() {
           {loading ? (
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
-            <p className="mt-4 text-2xl font-semibold tracking-tight text-red-500">
+            <p className="mt-4 text-xl font-semibold tracking-tight break-words text-red-500 sm:text-2xl">
               {formatCurrency(expense, currency, privacyMode)}
             </p>
           )}
@@ -234,14 +234,14 @@ export default function CashFlowPage() {
           {loading ? (
             <span className="mt-4 block h-8 w-36 animate-pulse rounded bg-zinc-800" />
           ) : (
-            <p className={`mt-4 text-2xl font-semibold tracking-tight ${balanceTone}`}>
+            <p className={`mt-4 text-xl font-semibold tracking-tight break-words sm:text-2xl ${balanceTone}`}>
               {formatSignedCurrency(balance, currency, privacyMode)}
             </p>
           )}
         </article>
       </section>
 
-      <section aria-label="Análise gráfica" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section aria-label="Análise gráfica" className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
         <SpendingHeatmap
           monthLabel={formatMonthName(year, month)}
           total={expense}

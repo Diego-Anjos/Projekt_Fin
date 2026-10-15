@@ -124,7 +124,7 @@ export default function Home() {
   const formatMoney = (value: number) => formatCurrency(value, currency, privacyMode);
 
   return (
-    <div className="flex min-h-full flex-col gap-8 p-6">
+    <div className="flex min-h-full flex-col gap-4 md:gap-6 lg:gap-8">
       <DashboardSessionBar />
 
       <section aria-labelledby="market-hub-heading">
@@ -136,7 +136,7 @@ export default function Home() {
           Portfolio KPIs
         </h2>
         <PortfolioKPIs kpis={kpis} formatCurrency={formatMoney} />
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
           <RecentTransactions transactions={transactions} formatCurrency={formatMoney} />
           <RecurringSubscriptions subscriptions={subscriptions} formatCurrency={formatMoney} />
         </div>

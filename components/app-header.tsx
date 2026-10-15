@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Menu } from "lucide-react";
 
 const languages = [
   { code: "PT", label: "Português", flag: "br" },
@@ -11,15 +12,23 @@ const languages = [
   { code: "JA", label: "日本語", flag: "jp" },
 ] as const;
 
-export function AppHeader() {
+export function AppHeader({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const { currentLang, setLang } = useLanguage();
 
   return (
     <header
       aria-label="Cabeçalho"
-      className="flex h-16 shrink-0 items-center justify-end gap-4 border-b border-zinc-800 bg-black px-6"
+      className="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-black px-4 md:px-8 lg:px-10"
     >
-      <div className="flex shrink-0 items-center gap-3">
+      <button
+        type="button"
+        onClick={onOpenMenu}
+        aria-label="Abrir menu"
+        className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-zinc-100 transition-colors hover:bg-zinc-900 md:hidden"
+      >
+        <Menu className="size-5" aria-hidden="true" />
+      </button>
+      <div className="ml-auto flex min-w-0 items-center gap-2 overflow-x-auto sm:gap-3">
         {languages.map((language) => {
           const selected = currentLang === language.code;
 

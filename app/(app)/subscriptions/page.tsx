@@ -132,8 +132,8 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-6 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-8 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex w-full flex-col gap-4 md:gap-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
         <div className="flex items-center gap-6">
           <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-emerald-800/40 bg-emerald-500/10 text-emerald-400">
             <Layers className="size-8" aria-hidden="true" />
@@ -165,7 +165,7 @@ export default function SubscriptionsPage() {
           registar os seus serviços.
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {subscriptions.map((subscription) => (
             <li
               key={subscription.id}
@@ -199,7 +199,7 @@ export default function SubscriptionsPage() {
                 </div>
               </div>
 
-              <h2 className="mt-4 text-base font-semibold text-zinc-50">{subscription.name}</h2>
+              <h2 className="mt-4 truncate text-base font-semibold text-zinc-50">{subscription.name}</h2>
 
               <p className="mt-4">
                 <span className="text-2xl font-semibold tracking-tight text-zinc-50">
@@ -217,7 +217,7 @@ export default function SubscriptionsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500">Pagamento</p>
-                  <p className="mt-1 text-sm font-medium text-zinc-200">
+                  <p className="mt-1 truncate text-sm font-medium text-zinc-200">
                     {paymentLabel[subscription.payment]}
                   </p>
                 </div>

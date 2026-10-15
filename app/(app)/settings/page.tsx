@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
 
   return (
-    <div className="flex w-full flex-col gap-6 px-6 py-8">
+    <div className="flex w-full flex-col gap-4 md:gap-6">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-5">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
           Configurações

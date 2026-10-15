@@ -39,7 +39,13 @@ function getInitials(name: string, email: string) {
   return source.slice(0, 2).toUpperCase();
 }
 
-export function Sidebar() {
+export function Sidebar({
+  open = false,
+  onNavigate,
+}: {
+  open?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const { t } = useLanguage();
   const { user } = useSession();
@@ -50,10 +56,12 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Barra lateral"
-      className="flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-800 bg-[#041610]"
+      className={`flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-800 bg-[#041610] max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform max-md:duration-300 ${
+        open ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+      }`}
     >
       <div className="px-5 pt-6 pb-5">
-        <Link href="/dashboard" className="block w-40">
+        <Link href="/dashboard" onClick={onNavigate} className="block w-40">
           <Image
             src="/Logotipo Projekt Fin em fundo transparente.png"
             alt="Logo Projekt Fin"
@@ -100,6 +108,7 @@ export function Sidebar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={onNavigate}
                   aria-current={isCurrent ? "page" : undefined}
                   className={
                     isCurrent

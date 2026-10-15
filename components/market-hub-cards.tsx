@@ -103,7 +103,7 @@ export function MarketHubCards({ news }: { news: ReactNode }) {
       <h2 id="market-hub-heading" className="mb-4 text-base font-semibold text-zinc-100">
         Market Hub APIs
       </h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1.35fr)]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1.35fr)]">
         {market ? (
           <>
             <article className="flex h-20 items-center justify-between gap-3 rounded-xl border border-zinc-700/50 bg-black px-3">

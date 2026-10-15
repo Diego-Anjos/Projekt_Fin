@@ -25,11 +25,11 @@ export function PortfolioKPIs({
   const { privacyMode } = usePreferences();
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">Total Wealth</p>
         <div className="mt-4 flex items-end justify-between gap-3">
-          <p className="text-2xl font-semibold tracking-tight text-zinc-100">
+          <p className="min-w-0 text-xl font-semibold tracking-tight break-words text-zinc-100 sm:text-2xl">
             {formatCurrency(kpis.totalWealth)}
           </p>
           <span
@@ -45,7 +45,7 @@ export function PortfolioKPIs({
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">Monthly Cash Flow</p>
         <p
-          className={`mt-4 text-3xl font-semibold tracking-tight ${
+          className={`mt-4 min-w-0 text-2xl font-semibold tracking-tight break-words sm:text-3xl ${
             privacyMode ? "text-zinc-100" : valueTone(kpis.monthlyCashFlow)
           }`}
         >
@@ -57,7 +57,7 @@ export function PortfolioKPIs({
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">Gastos do Mês Atual</p>
         <p
-          className={`mt-4 text-3xl font-semibold tracking-tight ${
+          className={`mt-4 min-w-0 text-2xl font-semibold tracking-tight break-words sm:text-3xl ${
             privacyMode ? "text-zinc-100" : "text-red-500"
           }`}
         >

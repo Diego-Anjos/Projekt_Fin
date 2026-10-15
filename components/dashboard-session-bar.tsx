@@ -25,10 +25,10 @@ export function DashboardSessionBar() {
   const displayName = user.name.trim() || user.email;
 
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-emerald-900/70 bg-[#041610] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">Dashboard</h1>
-        <p className="mt-1 text-sm text-emerald-100/80">
+    <section className="flex flex-col gap-4 rounded-xl border border-emerald-900/70 bg-[#041610] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">Dashboard</h1>
+        <p className="mt-1 truncate text-sm text-emerald-100/80">
           Bem-vindo de volta, {displayName}!
         </p>
       </div>

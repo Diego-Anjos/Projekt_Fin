@@ -150,7 +150,7 @@ export default function InvestimentosPage() {
   };
 
   return (
-    <div className="flex w-full flex-col px-6 py-8">
+    <div className="flex w-full flex-col">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-8 sm:px-8">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
           Investimentos

@@ -10,7 +10,7 @@ export function RecurringSubscriptions({
   formatCurrency: (value: number) => string;
 }) {
   return (
-    <article id="subscriptions" className="rounded-xl border border-zinc-700/50 bg-black p-4">
+    <article id="subscriptions" className="min-w-0 rounded-xl border border-zinc-700/50 bg-black p-4">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-zinc-100">Assinaturas Recorrentes</h3>
         <Link href="/subscriptions" className="text-xs font-medium text-emerald-500">
@@ -28,14 +28,14 @@ export function RecurringSubscriptions({
                 <CompanyLogo name={item.name} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-zinc-100">{item.name}</p>
-                  <p className="text-xs text-zinc-400">{item.date}</p>
+                  <p className="truncate text-xs text-zinc-400">{item.date}</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-zinc-100">
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-medium whitespace-nowrap text-zinc-100">
                   {formatCurrency(item.amount)}
                 </p>
-                <p className="text-xs text-zinc-400">{item.renewalDate}</p>
+                <p className="max-w-28 truncate text-xs text-zinc-400 sm:max-w-none">{item.renewalDate}</p>
               </div>
             </li>
           ))}
