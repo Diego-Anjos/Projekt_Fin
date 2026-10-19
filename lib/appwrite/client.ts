@@ -30,6 +30,8 @@ export const appwriteConfig = {
   databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID as string,
   transactionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID as string,
   subscriptionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID as string,
+  goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID ?? "",
   categoriesCollectionId: appwriteCategoriesCollectionId ?? "",
   avatarsBucketId: process.env.NEXT_PUBLIC_APPWRITE_AVATARS_BUCKET_ID ?? "",
+  goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID ?? "",
 };

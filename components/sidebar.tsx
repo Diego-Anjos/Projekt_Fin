@@ -10,6 +10,7 @@ import {
   Newspaper,
   Settings,
   ShoppingBag,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -23,6 +24,7 @@ const navItems: { labelKey: string; href: string; icon: LucideIcon }[] = [
   { labelKey: "sidebar.purchases", href: "/compras", icon: ShoppingBag },
   { labelKey: "sidebar.subscriptions", href: "/subscriptions", icon: Layers },
   { labelKey: "sidebar.cashFlow", href: "/cash-flow", icon: ChartColumn },
+  { labelKey: "sidebar.goals", href: "/metas", icon: Target },
   { labelKey: "sidebar.investments", href: "/investimentos", icon: CandlestickChart },
   { labelKey: "sidebar.news", href: "/noticias", icon: Newspaper },
   { labelKey: "sidebar.settings", href: "/settings", icon: Settings },

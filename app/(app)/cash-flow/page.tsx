@@ -4,8 +4,21 @@ import { SpendingHeatmap } from "@/components/spending-heatmap";
 import { CategoryBubbleChart, type CategoryBubble } from "@/components/ui/category-bubble-chart";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
-import { getAllTransactions, type TransactionDocument } from "@/lib/appwrite/database";
-import { dailyExpenses, expenseCategories, monthOptions, monthValue, sumByType, type CashTransaction } from "@/lib/cash-flow";
+import {
+  getAllTransactions,
+  getSubscriptions,
+  type SubscriptionDocument,
+  type TransactionDocument,
+} from "@/lib/appwrite/database";
+import {
+  dailyExpenses,
+  expenseCategories,
+  monthOptions,
+  monthValue,
+  subscriptionExpensesForMonth,
+  sumByType,
+  type CashTransaction,
+} from "@/lib/cash-flow";
 import { getCategoryIcon, normalizeCategoryName } from "@/lib/category-utils";
 import { formatCurrency } from "@/lib/utils";
 import { ArrowDown, ArrowUp, Scale } from "lucide-react";
@@ -20,7 +33,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   alimentacao: "#0ea5e9",
   moradia: "#10b981",
   saude: "#14b8a6",
-  assinaturas: "#f472b6",
+  assinaturas: "#7c3aed",
   salario: "#eab308",
 };
 
@@ -66,31 +79,37 @@ export default function CashFlowPage() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [transactions, setTransactions] = useState<CashTransaction[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
-    async function loadTransactions() {
+    async function loadCashFlowData() {
       setLoading(true);
       setError(null);
 
       try {
-        const documents = await getAllTransactions(user.$id);
+        const [transactionDocuments, subscriptionsResponse] = await Promise.all([
+          getAllTransactions(user.$id),
+          getSubscriptions(user.$id),
+        ]);
         if (!active) return;
-        setTransactions(documents.map(toCashTransaction));
+        setTransactions(transactionDocuments.map(toCashTransaction));
+        setSubscriptions(subscriptionsResponse.documents);
       } catch (caught) {
         console.error("Falha ao carregar o fluxo de caixa.", caught);
         if (!active) return;
         setTransactions([]);
-        setError("Não foi possível carregar as transações.");
+        setSubscriptions([]);
+        setError("Não foi possível carregar as transações e assinaturas.");
       } finally {
         if (active) setLoading(false);
       }
     }
 
-    void loadTransactions();
+    void loadCashFlowData();
 
     return () => {
       active = false;
@@ -99,13 +118,23 @@ export default function CashFlowPage() {
 
   const options = useMemo(() => monthOptions(transactions, today), [transactions, today]);
 
+  const subscriptionExpenses = useMemo(
+    () => subscriptionExpensesForMonth(subscriptions, year, month),
+    [subscriptions, year, month],
+  );
+
+  const flowTransactions = useMemo(
+    () => [...transactions, ...subscriptionExpenses],
+    [transactions, subscriptionExpenses],
+  );
+
   const income = useMemo(
     () => sumByType(transactions, year, month, "income"),
     [transactions, year, month],
   );
   const expense = useMemo(
-    () => sumByType(transactions, year, month, "expense"),
-    [transactions, year, month],
+    () => sumByType(flowTransactions, year, month, "expense"),
+    [flowTransactions, year, month],
   );
   const balance = useMemo(() => {
     const net = Math.round((income - expense) * 100) / 100;
@@ -113,19 +142,19 @@ export default function CashFlowPage() {
   }, [income, expense]);
 
   const heatmapDays = useMemo(
-    () => dailyExpenses(transactions, year, month),
-    [transactions, year, month],
+    () => dailyExpenses(flowTransactions, year, month),
+    [flowTransactions, year, month],
   );
   const bubbleData = useMemo<CategoryBubble[]>(
     () =>
-      expenseCategories(transactions, year, month).map((category, index) => ({
+      expenseCategories(flowTransactions, year, month).map((category, index) => ({
         id: category.name,
         name: category.name,
         value: category.value,
         icon: getCategoryIcon(category.name),
         color: categoryColor(category.name, index),
       })),
-    [transactions, year, month],
+    [flowTransactions, year, month],
   );
 
   const balanceTone = privacyMode

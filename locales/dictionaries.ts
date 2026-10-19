@@ -8,6 +8,7 @@ type Dictionary = {
     purchases: string;
     subscriptions: string;
     cashFlow: string;
+    goals: string;
     investments: string;
     news: string;
     settings: string;
@@ -24,6 +25,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "Compras",
       subscriptions: "Assinaturas",
       cashFlow: "Fluxo de Caixa",
+      goals: "Minhas Metas",
       investments: "Investimentos",
       news: "Notícias",
       settings: "Configurações",
@@ -38,6 +40,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "Purchases",
       subscriptions: "Subscriptions",
       cashFlow: "Cash Flow",
+      goals: "My Goals",
       investments: "Investments",
       news: "News",
       settings: "Settings",
@@ -52,6 +55,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "Compras",
       subscriptions: "Suscripciones",
       cashFlow: "Flujo de caja",
+      goals: "Mis Metas",
       investments: "Inversiones",
       news: "Noticias",
       settings: "Ajustes",
@@ -66,6 +70,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "Acquisti",
       subscriptions: "Abbonamenti",
       cashFlow: "Flusso di cassa",
+      goals: "I Miei Obiettivi",
       investments: "Investimenti",
       news: "Notizie",
       settings: "Impostazioni",
@@ -80,6 +85,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "購入",
       subscriptions: "サブスクリプション",
       cashFlow: "キャッシュフロー",
+      goals: "目標",
       investments: "投資",
       news: "ニュース",
       settings: "設定",
@@ -94,6 +100,7 @@ export const translations: Record<LanguageCode, Dictionary> = {
       purchases: "Achats",
       subscriptions: "Abonnements",
       cashFlow: "Flux de trésorerie",
+      goals: "Mes Objectifs",
       investments: "Investissements",
       news: "Actualités",
       settings: "Paramètres",

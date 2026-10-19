@@ -191,3 +191,91 @@ export function monthOptions(transactions: CashTransaction[], now = new Date()):
 
   return options;
 }
+
+export const SUBSCRIPTIONS_CATEGORY = "Assinaturas";
+
+export type SubscriptionCashSource = {
+  amount: number;
+  cycle: string;
+  status: string;
+  subscribedAt: string;
+  nextDue: string;
+};
+
+function isActiveSubscription(status: string) {
+  return status.trim().toLowerCase() === "active";
+}
+
+function isMonthlyCycle(cycle: string) {
+  return cycle.trim().toLowerCase() === "monthly";
+}
+
+function subscriptionStartedByMonth(
+  subscribedAt: string,
+  year: number,
+  month: number,
+) {
+  const start = readMonth(subscribedAt);
+  if (!start) return true;
+  return compareMonths(start, { year, month }) <= 0;
+}
+
+function billingDayInMonth(dateValue: string, year: number, month: number) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue);
+  const rawDay = match ? Number(match[3]) : 1;
+  const maxDay = daysInMonth(year, month);
+  const day = Number.isFinite(rawDay) ? Math.min(Math.max(rawDay, 1), maxDay) : 1;
+  return day;
+}
+
+function isoDateInMonth(year: number, month: number, day: number) {
+  const mm = String(month + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
+}
+
+/** Converte assinaturas mensais ativas em despesas virtuais do mês selecionado. */
+export function subscriptionExpensesForMonth(
+  subscriptions: SubscriptionCashSource[],
+  year: number,
+  month: number,
+): CashTransaction[] {
+  const expenses: CashTransaction[] = [];
+
+  for (const subscription of subscriptions) {
+    if (!isActiveSubscription(subscription.status)) continue;
+    if (!isMonthlyCycle(subscription.cycle)) continue;
+    if (!subscriptionStartedByMonth(subscription.subscribedAt, year, month)) continue;
+
+    const amount = finiteAmount(subscription.amount);
+    if (amount <= 0) continue;
+
+    const day = billingDayInMonth(
+      subscription.nextDue || subscription.subscribedAt,
+      year,
+      month,
+    );
+
+    expenses.push({
+      type: "expense",
+      category: SUBSCRIPTIONS_CATEGORY,
+      date: isoDateInMonth(year, month, day),
+      amount: roundCurrency(amount),
+    });
+  }
+
+  return expenses;
+}
+
+export function sumActiveMonthlySubscriptions(
+  subscriptions: SubscriptionCashSource[],
+  year: number,
+  month: number,
+) {
+  return roundCurrency(
+    subscriptionExpensesForMonth(subscriptions, year, month).reduce(
+      (total, item) => total + item.amount,
+      0,
+    ),
+  );
+}
