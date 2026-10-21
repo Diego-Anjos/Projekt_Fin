@@ -118,7 +118,73 @@ export async function createGoal(goalData: GoalInput) {
   );
 }
 
-export async function getGoals(userId: string) {
+export type UpdateGoalInput = Partial<Omit<GoalInput, "userId" | "imageId">> & {
+  /** `null` limpa a imagem associada à meta. */
+  imageId?: string | null;
+};
+
+export async function updateGoal(documentId: string, data: UpdateGoalInput) {
+  if (!documentId) {
+    throw new Error("documentId é obrigatório para atualizar uma meta.");
+  }
+
+  const payload: Partial<
+    Pick<
+      GoalDocument,
+      "title" | "targetAmount" | "currentAmount" | "targetDate" | "category" | "imageId" | "isCompleted"
+    >
+  > = {};
+
+  if (data.title !== undefined) payload.title = data.title.trim();
+  if (data.targetAmount !== undefined) payload.targetAmount = Number(data.targetAmount);
+  if (data.currentAmount !== undefined) payload.currentAmount = Number(data.currentAmount);
+  if (data.targetDate !== undefined) payload.targetDate = data.targetDate;
+  if (data.category !== undefined) payload.category = data.category;
+  if (data.isCompleted !== undefined) payload.isCompleted = Boolean(data.isCompleted);
+  if (data.imageId !== undefined) payload.imageId = data.imageId;
+
+  return databases.updateDocument<GoalDocument>({
+    databaseId: appwriteConfig.databaseId,
+    collectionId: goalsCollectionId(),
+    documentId,
+    data: payload,
+  });
+}
+
+/**
+ * Apaga apenas o ficheiro de imagem da meta no Storage.
+ * Best-effort: nunca lança — uma imagem órfã não deve bloquear a edição/exclusão da meta.
+ */
+export async function deleteGoalImage(imageId: string) {
+  if (!imageId || !appwriteConfig.goalsBucketId) return;
+
+  try {
+    await storage.deleteFile({
+      bucketId: appwriteConfig.goalsBucketId,
+      fileId: imageId,
+    });
+  } catch (error) {
+    console.error("Falha ao apagar a imagem da meta no Storage:", error);
+  }
+}
+
+export async function deleteGoal(documentId: string, imageId?: string | null) {
+  if (!documentId) {
+    throw new Error("documentId é obrigatório para excluir uma meta.");
+  }
+
+  await databases.deleteDocument({
+    databaseId: appwriteConfig.databaseId,
+    collectionId: goalsCollectionId(),
+    documentId,
+  });
+
+  if (imageId) {
+    await deleteGoalImage(imageId);
+  }
+}
+
+export async function getGoals(userId: string, limit = 10, offset = 0) {
   if (!appwriteConfig.goalsCollectionId) {
     return { documents: [] as GoalDocument[], total: 0 };
   }
@@ -126,6 +192,11 @@ export async function getGoals(userId: string) {
   return databases.listDocuments<GoalDocument>(
     appwriteConfig.databaseId,
     goalsCollectionId(),
-    [Query.equal("userId", userId), Query.orderDesc("$createdAt"), Query.limit(100)],
+    [
+      Query.equal("userId", userId),
+      Query.orderDesc("$createdAt"),
+      Query.limit(limit),
+      Query.offset(offset),
+    ],
   );
 }

@@ -4,22 +4,24 @@ export function getCurrencyLocale(currency: string) {
   return "pt-BR";
 }
 
+export const getCurrencySymbol = (currency: string) => {
+  if (currency === "USD") return "$";
+  if (currency === "EUR") return "€";
+  return "R$";
+};
+
 export const formatCurrency = (
   value: number,
   currency: string = "BRL",
   privacyMode: boolean = false,
 ) => {
-  if (privacyMode) return "••••••";
+  // Máscara fixa com o símbolo da moeda selecionada (ex: "R$ •••••"):
+  // não revela valor, sinal nem ordem de grandeza.
+  if (privacyMode) return `${getCurrencySymbol(currency)} •••••`;
   return new Intl.NumberFormat(getCurrencyLocale(currency), {
     style: "currency",
     currency,
   }).format(value);
-};
-
-export const getCurrencySymbol = (currency: string) => {
-  if (currency === "USD") return "$";
-  if (currency === "EUR") return "€";
-  return "R$";
 };
 
 export const formatCurrencyInput = (value: string | number, currency: string = "BRL"): string => {

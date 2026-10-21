@@ -5,11 +5,14 @@ import { useSession } from "@/components/require-session";
 import { SubscriptionModal, type ServiceSubscription } from "@/components/subscription-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
+import { Pagination } from "@/components/ui/pagination";
 import { deleteSubscription, getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
 import { formatCurrency } from "@/lib/utils";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+const ITEMS_PER_PAGE = 10;
 
 const cycleLabel = {
   monthly: "Mensal",
@@ -55,19 +58,41 @@ export default function SubscriptionsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<ServiceSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  function handlePageChange(page: number) {
+    setLoading(true);
+    setCurrentPage(page);
+  }
 
   useEffect(() => {
     let active = true;
 
     async function loadSubscriptions() {
       try {
-        const response = await getSubscriptions(user.$id);
+        const response = await getSubscriptions(
+          user.$id,
+          ITEMS_PER_PAGE,
+          (currentPage - 1) * ITEMS_PER_PAGE,
+        );
         if (!active) return;
+
+        setTotalItems(response.total);
+
+        const lastPage = Math.max(1, Math.ceil(response.total / ITEMS_PER_PAGE));
+        if (response.total > 0 && currentPage > lastPage) {
+          setCurrentPage(lastPage);
+          return;
+        }
+
         setSubscriptions(response.documents.map(toServiceSubscription));
       } catch (error) {
         console.error("Falha ao carregar assinaturas.", error);
         if (active) {
           setSubscriptions([]);
+          setTotalItems(0);
           toast.error("Falha ao carregar as assinaturas. Tente novamente.");
         }
       } finally {
@@ -80,7 +105,7 @@ export default function SubscriptionsPage() {
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, currentPage, refreshKey]);
 
   function openCreateModal() {
     setEditingSubscription(null);
@@ -111,6 +136,11 @@ export default function SubscriptionsPage() {
       setDeletingId(subscription.id);
       await deleteSubscription(subscription.id);
       setSubscriptions((current) => current.filter((item) => item.id !== subscription.id));
+      if (subscriptions.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        setRefreshKey((key) => key + 1);
+      }
       if (editingSubscription?.id === subscription.id) {
         closeModal();
       }
@@ -124,11 +154,15 @@ export default function SubscriptionsPage() {
   }
 
   function handleSave(subscription: ServiceSubscription) {
-    setSubscriptions((current) => {
-      const exists = current.some((item) => item.id === subscription.id);
-      if (!exists) return [subscription, ...current];
-      return current.map((item) => (item.id === subscription.id ? subscription : item));
-    });
+    if (editingSubscription) {
+      setSubscriptions((current) =>
+        current.map((item) => (item.id === subscription.id ? subscription : item)),
+      );
+      setRefreshKey((key) => key + 1);
+      return;
+    }
+    if (currentPage !== 1) setCurrentPage(1);
+    setRefreshKey((key) => key + 1);
   }
 
   return (
@@ -165,6 +199,7 @@ export default function SubscriptionsPage() {
           registar os seus serviços.
         </div>
       ) : (
+        <>
         <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {subscriptions.map((subscription) => (
             <li
@@ -225,6 +260,15 @@ export default function SubscriptionsPage() {
             </li>
           ))}
         </ul>
+        {totalItems > 0 ? (
+          <Pagination
+            currentPage={currentPage}
+            totalItems={totalItems}
+            itemsPerPage={ITEMS_PER_PAGE}
+            onPageChange={handlePageChange}
+          />
+        ) : null}
+        </>
       )}
 
       <SubscriptionModal

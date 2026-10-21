@@ -28,9 +28,14 @@ const client = new Client()
   .setKey(requireEnv("APPWRITE_API_KEY"));
 
 export const appwriteConfig = {
+  endpoint: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || "",
+  projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || "",
   databaseId: requireEnv("NEXT_PUBLIC_APPWRITE_DATABASE_ID"),
   transactionsCollectionId: requireEnv("NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID"),
   subscriptionsCollectionId: requireEnv("NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID"),
+  // Opcionais (sem requireEnv): não devem derrubar o servidor se ainda não forem criados no Appwrite.
+  goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID || "",
+  goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID || "",
 };
 
 export const appwriteServerClient = client;

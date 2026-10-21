@@ -93,7 +93,7 @@ export default function CashFlowPage() {
       try {
         const [transactionDocuments, subscriptionsResponse] = await Promise.all([
           getAllTransactions(user.$id),
-          getSubscriptions(user.$id),
+          getSubscriptions(user.$id, 100),
         ]);
         if (!active) return;
         setTransactions(transactionDocuments.map(toCashTransaction));

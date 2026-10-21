@@ -39,11 +39,42 @@ function ownerPermissions(userId: string) {
   return [Permission.read(role), Permission.update(role), Permission.delete(role)];
 }
 
-export async function getTransactions(userId: string, limit = 10) {
+export type TransactionPageFilters = {
+  status?: "Paid" | "Pending";
+  /** Mês no formato "YYYY-MM". Filtrado no servidor por intervalo de datas. */
+  month?: string;
+};
+
+/** Último instante (exclusivo) do mês seguinte, para o intervalo [início, fim). */
+function nextMonthStart(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const next = new Date(Date.UTC(year, monthNumber, 1));
+  return next.toISOString();
+}
+
+export async function getTransactions(
+  userId: string,
+  limit = 10,
+  offset = 0,
+  filters: TransactionPageFilters = {},
+) {
+  const queries = [
+    Query.equal("userId", userId),
+    Query.orderDesc("date"),
+    Query.limit(limit),
+    Query.offset(offset),
+  ];
+
+  if (filters.status) queries.push(Query.equal("status", filters.status));
+  if (filters.month) {
+    queries.push(Query.greaterThanEqual("date", `${filters.month}-01T00:00:00.000Z`));
+    queries.push(Query.lessThan("date", nextMonthStart(filters.month)));
+  }
+
   return databases.listDocuments<TransactionDocument>(
     appwriteConfig.databaseId,
     appwriteConfig.transactionsCollectionId,
-    [Query.equal("userId", userId), Query.orderDesc("date"), Query.limit(limit)],
+    queries,
   );
 }
 
@@ -84,11 +115,16 @@ export async function getAllTransactions(userId: string) {
   return documents;
 }
 
-export async function getSubscriptions(userId: string) {
+export async function getSubscriptions(userId: string, limit = 10, offset = 0) {
   return databases.listDocuments<SubscriptionDocument>(
     appwriteConfig.databaseId,
     appwriteConfig.subscriptionsCollectionId,
-    [Query.equal("userId", userId)],
+    [
+      Query.equal("userId", userId),
+      Query.orderDesc("$createdAt"),
+      Query.limit(limit),
+      Query.offset(offset),
+    ],
   );
 }
 

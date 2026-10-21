@@ -246,7 +246,17 @@ function ProfilePanel() {
 }
 
 function PreferencesPanel() {
-  const { currency, setCurrency, privacyMode, setPrivacyMode } = usePreferences();
+  const { currency, setCurrency, privacyMode, togglePrivacyMode } = usePreferences();
+
+  function handleTogglePrivacy() {
+    const next = !privacyMode;
+    togglePrivacyMode();
+    toast.success(
+      next
+        ? "Modo de privacidade ativado. Os saldos estão ocultos."
+        : "Modo de privacidade desativado. Os saldos estão visíveis.",
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -283,14 +293,7 @@ function PreferencesPanel() {
         </div>
         <Toggle
           checked={privacyMode}
-          onChange={(next) => {
-            setPrivacyMode(next);
-            if (next) {
-              toast.success("Modo de privacidade ativado. Os saldos estão ocultos.");
-            } else {
-              toast.success("Modo de privacidade desativado. Os saldos estão visíveis.");
-            }
-          }}
+          onChange={handleTogglePrivacy}
           label="Modo de Privacidade (Ocultar saldos)"
         />
       </div>

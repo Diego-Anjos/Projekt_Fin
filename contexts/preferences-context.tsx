@@ -23,8 +23,11 @@ type StoredPreferences = {
 };
 
 type PreferencesContextValue = StoredPreferences & {
+  /** Alias legível de `privacyMode` para os ecrãs de valores financeiros. */
+  isPrivacyMode: boolean;
   setCurrency: (currency: AppCurrency) => void;
   setPrivacyMode: (privacyMode: boolean) => void;
+  togglePrivacyMode: () => void;
   applyRemotePrefs: (prefs: object) => void;
 };
 
@@ -152,15 +155,30 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  // Lê o snapshot atual em vez de fechar sobre `preferences`, para dois
+  // toggles rápidos seguidos não partirem de um valor desatualizado.
+  const togglePrivacyMode = useCallback(() => {
+    commit({ privacyMode: !parsePreferences(getSnapshot()).privacyMode });
+  }, [commit]);
+
   const value = useMemo(
     () => ({
       currency: preferences.currency,
       privacyMode: preferences.privacyMode,
+      isPrivacyMode: preferences.privacyMode,
       setCurrency,
       setPrivacyMode,
+      togglePrivacyMode,
       applyRemotePrefs,
     }),
-    [preferences.currency, preferences.privacyMode, setCurrency, setPrivacyMode, applyRemotePrefs],
+    [
+      preferences.currency,
+      preferences.privacyMode,
+      setCurrency,
+      setPrivacyMode,
+      togglePrivacyMode,
+      applyRemotePrefs,
+    ],
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

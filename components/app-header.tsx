@@ -1,7 +1,8 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Menu } from "lucide-react";
+import { usePreferences } from "@/contexts/preferences-context";
+import { Eye, EyeOff, Menu } from "lucide-react";
 
 const languages = [
   { code: "PT", label: "Português", flag: "br" },
@@ -14,6 +15,7 @@ const languages = [
 
 export function AppHeader({ onOpenMenu }: { onOpenMenu?: () => void }) {
   const { currentLang, setLang } = useLanguage();
+  const { privacyMode, togglePrivacyMode } = usePreferences();
 
   return (
     <header
@@ -29,6 +31,22 @@ export function AppHeader({ onOpenMenu }: { onOpenMenu?: () => void }) {
         <Menu className="size-5" aria-hidden="true" />
       </button>
       <div className="ml-auto flex min-w-0 items-center gap-2 overflow-x-auto sm:gap-3">
+        <button
+          type="button"
+          onClick={togglePrivacyMode}
+          aria-pressed={privacyMode}
+          aria-label={privacyMode ? "Mostrar saldos" : "Ocultar saldos"}
+          title={privacyMode ? "Mostrar saldos" : "Ocultar saldos"}
+          className={`inline-flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-zinc-900 ${
+            privacyMode ? "text-emerald-400" : "text-zinc-400 hover:text-zinc-100"
+          }`}
+        >
+          {privacyMode ? (
+            <EyeOff className="size-5" aria-hidden="true" />
+          ) : (
+            <Eye className="size-5" aria-hidden="true" />
+          )}
+        </button>
         {languages.map((language) => {
           const selected = currentLang === language.code;
 

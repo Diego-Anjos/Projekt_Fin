@@ -27,11 +27,13 @@ if (!appwriteCategoriesCollectionId) {
 }
 
 export const appwriteConfig = {
-  databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID as string,
-  transactionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID as string,
-  subscriptionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID as string,
-  goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID ?? "",
-  categoriesCollectionId: appwriteCategoriesCollectionId ?? "",
-  avatarsBucketId: process.env.NEXT_PUBLIC_APPWRITE_AVATARS_BUCKET_ID ?? "",
-  goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID ?? "",
+  endpoint: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || "",
+  projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || "",
+  databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || "",
+  transactionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID || "",
+  subscriptionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID || "",
+  goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID || "",
+  categoriesCollectionId: appwriteCategoriesCollectionId || "",
+  avatarsBucketId: process.env.NEXT_PUBLIC_APPWRITE_AVATARS_BUCKET_ID || "",
+  goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID || "",
 };

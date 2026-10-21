@@ -4,11 +4,19 @@ import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
-import { deleteTransaction, getTransactions, type TransactionDocument } from "@/lib/appwrite/database";
+import { Pagination } from "@/components/ui/pagination";
+import {
+  deleteTransaction,
+  getAllTransactions,
+  getTransactions,
+  type TransactionDocument,
+} from "@/lib/appwrite/database";
 import { formatCurrency } from "@/lib/utils";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+const ITEMS_PER_PAGE = 10;
 
 const controlClassName =
   "h-11 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
@@ -61,20 +69,87 @@ export default function ComprasPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<PurchaseTransaction | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [month, setMonth] = useState("all");
   const [status, setStatus] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const isFiltered = debouncedSearch.trim() !== "" || month !== "all" || status !== "all";
+
+  // Evita um fetch por tecla: a pesquisa só dispara 300ms depois de parar de escrever.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  function handlePageChange(page: number) {
+    setLoading(true);
+    setCurrentPage(page);
+  }
 
   useEffect(() => {
     let active = true;
 
     async function loadTransactions() {
       try {
-        const response = await getTransactions(user.$id);
+        const query = debouncedSearch.trim().toLowerCase();
+
+        // A pesquisa por substring não tem query equivalente no Appwrite sem
+        // índice full-text, por isso nesse caso (raro) filtramos no cliente e
+        // paginamos o resultado filtrado. Sem pesquisa, a paginação é feita
+        // no servidor com Query.limit/Query.offset e response.total.
+        if (query) {
+          const documents = await getAllTransactions(user.$id);
+          if (!active) return;
+
+          const filtered = documents
+            .map(toPurchaseTransaction)
+            .filter((item) => {
+              const matchesSearch =
+                item.description.toLowerCase().includes(query) ||
+                item.category.toLowerCase().includes(query);
+              const matchesMonth = month === "all" || item.date.startsWith(month);
+              const matchesStatus = status === "all" || item.status === status;
+              return matchesSearch && matchesMonth && matchesStatus;
+            })
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+          const page = Math.min(currentPage, Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE)));
+          setTotalItems(filtered.length);
+          setTransactions(filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE));
+          if (page !== currentPage) setCurrentPage(page);
+          return;
+        }
+
+        const response = await getTransactions(
+          user.$id,
+          ITEMS_PER_PAGE,
+          (currentPage - 1) * ITEMS_PER_PAGE,
+          {
+            ...(status === "Paid" || status === "Pending" ? { status } : {}),
+            ...(month !== "all" ? { month } : {}),
+          },
+        );
         if (!active) return;
+
+        setTotalItems(response.total);
+
+        // A página pode ter deixado de existir (ex: última transação apagada).
+        const lastPage = Math.max(1, Math.ceil(response.total / ITEMS_PER_PAGE));
+        if (response.total > 0 && currentPage > lastPage) {
+          setCurrentPage(lastPage);
+          return;
+        }
+
         setTransactions(response.documents.map(toPurchaseTransaction));
       } catch (error) {
         console.error("Falha ao carregar transações.", error);
-        if (active) setTransactions([]);
+        if (active) {
+          setTransactions([]);
+          setTotalItems(0);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -85,28 +160,22 @@ export default function ComprasPage() {
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, currentPage, debouncedSearch, month, status, refreshKey]);
 
+  // Com paginação no servidor já não dá para derivar os meses da página atual
+  // (ficariam só os meses dos 10 itens visíveis), por isso oferecemos os
+  // últimos 24 meses.
   const monthOptions = useMemo(() => {
-    const keys = [...new Set(transactions.map((item) => item.date.slice(0, 7)))];
-    return keys.sort((a, b) => b.localeCompare(a));
-  }, [transactions]);
-
-  const filteredTransactions = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return transactions
-      .filter((item) => {
-        const matchesSearch =
-          query.length === 0 ||
-          item.description.toLowerCase().includes(query) ||
-          item.category.toLowerCase().includes(query);
-        const matchesMonth = month === "all" || item.date.startsWith(month);
-        const matchesStatus = status === "all" || item.status === status;
-        return matchesSearch && matchesMonth && matchesStatus;
-      })
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, search, month, status]);
+    const options: string[] = [];
+    const now = new Date();
+    for (let index = 0; index < 24; index += 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+      options.push(
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      );
+    }
+    return options;
+  }, []);
 
   function openCreateModal() {
     setEditing(null);
@@ -124,11 +193,17 @@ export default function ComprasPage() {
   }
 
   function handleSave(transaction: PurchaseTransaction) {
-    setTransactions((current) => {
-      const exists = current.some((item) => item.id === transaction.id);
-      if (!exists) return [transaction, ...current];
-      return current.map((item) => (item.id === transaction.id ? transaction : item));
-    });
+    if (editing) {
+      // Edição: substitui no lugar; o refetch reconcilia ordem/total se a data mudou.
+      setTransactions((current) =>
+        current.map((item) => (item.id === transaction.id ? transaction : item)),
+      );
+      setRefreshKey((key) => key + 1);
+      return;
+    }
+    // Criação: volta à primeira página, onde a nova transação é listada.
+    if (currentPage !== 1) setCurrentPage(1);
+    setRefreshKey((key) => key + 1);
   }
 
   async function handleDelete(transaction: PurchaseTransaction) {
@@ -145,6 +220,13 @@ export default function ComprasPage() {
       setDeletingId(transaction.id);
       await deleteTransaction(transaction.id);
       setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+      // Se a página ficou vazia, volta uma página; senão refetch para
+      // preencher a vaga com o primeiro item da página seguinte.
+      if (transactions.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        setRefreshKey((key) => key + 1);
+      }
       if (editing?.id === transaction.id) closeModal();
       toast.success(`Transação "${transaction.description}" excluída com sucesso!`);
     } catch (error) {
@@ -187,7 +269,10 @@ export default function ComprasPage() {
             <span className="sr-only">Mês</span>
             <select
               value={month}
-              onChange={(event) => setMonth(event.target.value)}
+              onChange={(event) => {
+                setMonth(event.target.value);
+                setCurrentPage(1);
+              }}
               className={`${controlClassName} [color-scheme:dark]`}
               aria-label="Mês"
             >
@@ -203,7 +288,10 @@ export default function ComprasPage() {
             <span className="sr-only">Status</span>
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setCurrentPage(1);
+              }}
               className={`${controlClassName} [color-scheme:dark]`}
               aria-label="Status"
             >
@@ -223,7 +311,10 @@ export default function ComprasPage() {
           <input
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Buscar..."
             className={`${controlClassName} w-full pr-3 pl-10`}
           />
@@ -253,17 +344,13 @@ export default function ComprasPage() {
               ) : transactions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-gray-400">
-                    Nenhuma transação encontrada. Clique em &apos;Nova Transação&apos; para começar.
-                  </td>
-                </tr>
-              ) : filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-zinc-400">
-                    Nenhuma transação encontrada.
+                    {isFiltered
+                      ? "Nenhuma transação encontrada."
+                      : "Nenhuma transação encontrada. Clique em 'Nova Transação' para começar."}
                   </td>
                 </tr>
               ) : (
-                filteredTransactions.map((transaction) => (
+                transactions.map((transaction) => (
                   <tr
                     key={transaction.id}
                     className="border-b border-zinc-800 transition-colors duration-200 last:border-b-0 hover:bg-zinc-800/40"
@@ -322,6 +409,16 @@ export default function ComprasPage() {
             </tbody>
           </table>
         </div>
+        {!loading && totalItems > 0 ? (
+          <div className="border-t border-zinc-800 px-4 py-3 md:px-5">
+            <Pagination
+              currentPage={currentPage}
+              totalItems={totalItems}
+              itemsPerPage={ITEMS_PER_PAGE}
+              onPageChange={handlePageChange}
+            />
+          </div>
+        ) : null}
       </div>
 
       <TransactionModal

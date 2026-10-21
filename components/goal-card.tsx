@@ -9,9 +9,12 @@ import {
   GraduationCap,
   Home,
   ImageIcon,
+  Loader2,
+  Pencil,
   Plane,
   Shield,
   Target,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import type { FinancialGoal, GoalCategory } from "@/components/goal-modal";
@@ -73,9 +76,13 @@ function getRemainingLabel(isoDate: string) {
 
 type GoalCardProps = {
   goal: FinancialGoal;
+  onEdit?: (goal: FinancialGoal) => void;
+  onDelete?: (goal: FinancialGoal) => void;
+  /** True enquanto a exclusão desta meta está em curso. */
+  isDeleting?: boolean;
 };
 
-export function GoalCard({ goal }: GoalCardProps) {
+export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCardProps) {
   const { currency, privacyMode } = usePreferences();
   const Icon = CATEGORY_ICONS[goal.category];
   const progress = goal.targetAmount > 0
@@ -92,8 +99,8 @@ export function GoalCard({ goal }: GoalCardProps) {
           : "border-zinc-700/50 bg-black/60 hover:border-emerald-500/40"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex items-center">
+        <div className="flex w-1/2 min-w-0 shrink-0 items-center gap-3">
           <span
             className={`flex size-11 shrink-0 items-center justify-center rounded-xl border ${
               isCompleted
@@ -109,7 +116,7 @@ export function GoalCard({ goal }: GoalCardProps) {
           </div>
         </div>
 
-        <div className="relative h-16 w-16 flex-shrink-0 md:h-20 md:w-20">
+        <div className="relative ml-4 h-24 min-w-0 flex-1 md:h-28">
           {goal.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -128,13 +135,46 @@ export function GoalCard({ goal }: GoalCardProps) {
               }`}
             >
               <ImageIcon
-                className={`h-6 w-6 md:h-8 md:w-8 ${
+                className={`h-8 w-8 md:h-10 md:w-10 ${
                   isCompleted ? "text-amber-400/70" : "text-emerald-500/70"
                 }`}
                 aria-hidden="true"
               />
             </div>
           )}
+
+          {onEdit || onDelete ? (
+            <div className="absolute top-2 right-2 z-20 flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-900/80 p-1.5 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={() => onEdit(goal)}
+                  disabled={isDeleting}
+                  aria-label={`Editar meta ${goal.title}`}
+                  title="Editar meta"
+                  className="flex size-7 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-emerald-400 disabled:opacity-50"
+                >
+                  <Pencil className="size-4" aria-hidden="true" />
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={() => onDelete(goal)}
+                  disabled={isDeleting}
+                  aria-label={`Excluir meta ${goal.title}`}
+                  title="Excluir meta"
+                  className="flex size-7 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-red-400 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div
             className={`absolute -right-2 -bottom-2 z-10 rounded-md border bg-zinc-900 px-2 py-1 text-xs font-bold ${

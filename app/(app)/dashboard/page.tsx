@@ -98,7 +98,7 @@ export default function Home() {
       try {
         const [transactionsResponse, subscriptionsResponse] = await Promise.all([
           getTransactions(user.$id, 100),
-          getSubscriptions(user.$id),
+          getSubscriptions(user.$id, 100),
         ]);
 
         if (!active) return;

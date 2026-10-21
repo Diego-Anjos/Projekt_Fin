@@ -1,9 +1,19 @@
 "use client";
 
 import { useSession } from "@/components/require-session";
-import { CustomDatePicker, toCalendarIso } from "@/components/ui/custom-date-picker";
+import {
+  CustomDatePicker,
+  parseCalendarDate,
+  toCalendarIso,
+} from "@/components/ui/custom-date-picker";
 import { usePreferences } from "@/contexts/preferences-context";
-import { createGoal, getGoalImageUrl, uploadGoalImage } from "@/lib/appwrite/goals";
+import {
+  createGoal,
+  deleteGoalImage,
+  getGoalImageUrl,
+  updateGoal,
+  uploadGoalImage,
+} from "@/lib/appwrite/goals";
 import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
 import {
   Camera,
@@ -62,29 +72,54 @@ type GoalModalProps = {
   open: boolean;
   onClose: () => void;
   onSave: (goal: FinancialGoal) => void;
+  /** Meta a editar; `null`/ausente = modo criação ("Nova Meta"). */
+  goalToEdit?: FinancialGoal | null;
 };
 
-export function GoalModal({ open, onClose, onSave }: GoalModalProps) {
+export function GoalModal({ open, onClose, onSave, goalToEdit }: GoalModalProps) {
   if (!open) return null;
 
-  return <GoalModalForm onClose={onClose} onSave={onSave} />;
+  return (
+    <GoalModalForm
+      key={goalToEdit?.id ?? "new"}
+      onClose={onClose}
+      onSave={onSave}
+      goalToEdit={goalToEdit ?? null}
+    />
+  );
+}
+
+/** `formatCurrencyInput` espera os dígitos em cêntimos (ex: "123456" -> 1.234,56). */
+function amountToInput(value: number, currency: string) {
+  return formatCurrencyInput(String(Math.round(value * 100)), currency);
 }
 
 function GoalModalForm({
   onClose,
   onSave,
-}: Omit<GoalModalProps, "open">) {
+  goalToEdit,
+}: Omit<GoalModalProps, "open"> & { goalToEdit: FinancialGoal | null }) {
   const { user } = useSession();
   const { currency } = usePreferences();
-  const [title, setTitle] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
-  const [currentAmount, setCurrentAmount] = useState(
-    formatCurrencyInput(0, currency),
+  const isEditing = goalToEdit !== null;
+  const [title, setTitle] = useState(goalToEdit?.title ?? "");
+  const [targetAmount, setTargetAmount] = useState(() =>
+    goalToEdit ? amountToInput(goalToEdit.targetAmount, currency) : "",
   );
-  const [targetDate, setTargetDate] = useState<Date | null>(null);
-  const [category, setCategory] = useState<GoalCategory>("travel");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [currentAmount, setCurrentAmount] = useState(() =>
+    goalToEdit
+      ? amountToInput(goalToEdit.currentAmount, currency)
+      : formatCurrencyInput(0, currency),
+  );
+  const [targetDate, setTargetDate] = useState<Date | null>(() =>
+    parseCalendarDate(goalToEdit?.targetDate),
+  );
+  const [category, setCategory] = useState<GoalCategory>(goalToEdit?.category ?? "travel");
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    goalToEdit?.imageUrl ?? null,
+  );
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -135,6 +170,7 @@ function GoalModalForm({
     }
 
     setImageFile(file);
+    setImageRemoved(false);
     setImagePreview(URL.createObjectURL(file));
   }
 
@@ -142,11 +178,21 @@ function GoalModalForm({
     if (imagePreview?.startsWith("blob:")) {
       URL.revokeObjectURL(imagePreview);
     }
-    setImagePreview(null);
-    setImageFile(null);
+
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+
+    // Descartar um ficheiro novo ainda não enviado restaura a imagem atual da meta.
+    if (imageFile) {
+      setImageFile(null);
+      setImagePreview(goalToEdit?.imageUrl ?? null);
+      return;
+    }
+
+    // Sem ficheiro novo, remover significa apagar a imagem existente ao guardar.
+    setImagePreview(null);
+    setImageRemoved(true);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -183,29 +229,57 @@ function GoalModalForm({
     }
 
     if (!user?.$id) {
-      setError("Sessão em falta. Entre novamente e tente criar a meta.");
+      setError("Sessão em falta. Entre novamente e tente outra vez.");
       return;
     }
+
+    let uploadedImageId: string | undefined;
 
     try {
       setIsSubmitting(true);
 
-      let imageId: string | undefined;
       if (imageFile) {
-        imageId = await uploadGoalImage(imageFile, user.$id);
+        uploadedImageId = await uploadGoalImage(imageFile, user.$id);
       }
 
       const isCompleted = parsedCurrent >= parsedTarget;
-      const document = await createGoal({
-        userId: user.$id,
-        title: trimmedTitle,
-        targetAmount: parsedTarget,
-        currentAmount: parsedCurrent,
-        targetDate: toCalendarIso(targetDate),
-        category,
-        isCompleted,
-        ...(imageId ? { imageId } : {}),
-      });
+      // undefined = manter a imagem atual; null = remover; string = substituir.
+      const nextImageId: string | null | undefined = uploadedImageId
+        ? uploadedImageId
+        : imageRemoved
+          ? null
+          : undefined;
+
+      const document =
+        isEditing && goalToEdit
+          ? await updateGoal(goalToEdit.id, {
+              title: trimmedTitle,
+              targetAmount: parsedTarget,
+              currentAmount: parsedCurrent,
+              targetDate: toCalendarIso(targetDate),
+              category,
+              isCompleted,
+              ...(nextImageId !== undefined ? { imageId: nextImageId } : {}),
+            })
+          : await createGoal({
+              userId: user.$id,
+              title: trimmedTitle,
+              targetAmount: parsedTarget,
+              currentAmount: parsedCurrent,
+              targetDate: toCalendarIso(targetDate),
+              category,
+              isCompleted,
+              ...(uploadedImageId ? { imageId: uploadedImageId } : {}),
+            });
+
+      // A atualização correu bem: já é seguro apagar a imagem antiga substituída/removida.
+      if (
+        goalToEdit?.imageId &&
+        nextImageId !== undefined &&
+        goalToEdit.imageId !== nextImageId
+      ) {
+        await deleteGoalImage(goalToEdit.imageId);
+      }
 
       const goal: FinancialGoal = {
         id: document.$id,
@@ -224,14 +298,20 @@ function GoalModalForm({
       };
 
       onSave(goal);
-      toast.success("Meta criada com sucesso!");
+      toast.success(isEditing ? "Meta atualizada com sucesso!" : "Meta criada com sucesso!");
       onClose();
     } catch (submitError) {
-      console.error("Falha ao criar meta:", submitError);
+      // Evita deixar órfã no Storage a imagem enviada se o documento falhar a guardar.
+      if (uploadedImageId) {
+        await deleteGoalImage(uploadedImageId);
+      }
+      console.error(isEditing ? "Falha ao atualizar meta:" : "Falha ao criar meta:", submitError);
       const message =
         submitError instanceof Error
           ? submitError.message
-          : "Falha ao criar a meta. Tente novamente.";
+          : isEditing
+            ? "Falha ao atualizar a meta. Tente novamente."
+            : "Falha ao criar a meta. Tente novamente.";
       setError(message);
       toast.error(message);
     } finally {
@@ -264,10 +344,12 @@ function GoalModalForm({
         </button>
 
         <h2 id="goal-modal-title" className="pr-10 text-xl font-semibold text-zinc-50">
-          Nova Meta
+          {isEditing ? "Editar Meta" : "Nova Meta"}
         </h2>
         <p className="mt-1 mb-6 text-sm text-zinc-400">
-          Defina um objetivo financeiro e acompanhe o progresso
+          {isEditing
+            ? "Atualize os dados do seu objetivo financeiro"
+            : "Defina um objetivo financeiro e acompanhe o progresso"}
         </p>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -309,7 +391,7 @@ function GoalModalForm({
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              Valor Inicial ({getCurrencySymbol(currency)})
+              {isEditing ? "Valor Atual" : "Valor Inicial"} ({getCurrencySymbol(currency)})
             </span>
             <span className="relative block">
               <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-medium text-emerald-400 select-none">
@@ -375,7 +457,7 @@ function GoalModalForm({
           <div className="flex flex-col gap-2 md:col-span-2">
             <span className="text-sm font-medium text-zinc-300">Foto de Inspiração</span>
             {imagePreview ? (
-              <div className="relative h-32 overflow-hidden rounded-xl border border-zinc-800">
+              <div className="relative h-40 w-full overflow-hidden rounded-xl border border-zinc-700/50 sm:h-48">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imagePreview}
@@ -386,13 +468,13 @@ function GoalModalForm({
                   type="button"
                   onClick={clearImagePreview}
                   aria-label="Remover foto"
-                  className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full border border-zinc-700/80 bg-black/70 text-zinc-200 backdrop-blur-sm transition-colors hover:bg-black/90 hover:text-white"
+                  className="absolute top-2 right-2 z-10 rounded-full bg-black/50 p-1.5 text-white backdrop-blur-md transition-colors hover:bg-red-500/80"
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
               </div>
             ) : (
-              <label className="flex h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/50 px-4 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-500/5">
+              <label className="flex h-40 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/50 px-4 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-500/5 sm:h-48">
                 <Camera className="size-6 text-emerald-400/80" aria-hidden="true" />
                 <span className="text-sm text-zinc-400">
                   Adicionar foto de inspiração (Opcional)
@@ -428,7 +510,13 @@ function GoalModalForm({
               disabled={isSubmitting}
               className="h-12 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60"
             >
-              {isSubmitting ? "A criar meta..." : "Criar Meta"}
+              {isSubmitting
+                ? isEditing
+                  ? "A guardar..."
+                  : "A criar meta..."
+                : isEditing
+                  ? "Guardar Alterações"
+                  : "Criar Meta"}
             </button>
           </div>
         </form>
