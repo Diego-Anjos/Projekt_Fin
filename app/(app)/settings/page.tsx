@@ -9,43 +9,58 @@ import {
 } from "@/lib/appwrite/database";
 import { updateUserProfile } from "@/lib/appwrite/auth";
 import { account } from "@/lib/appwrite/client";
+import { DeleteAccountModal } from "@/components/delete-account-modal";
+import {
+  countUserData,
+  deleteAllUserData,
+  fetchAllUserData,
+} from "@/lib/appwrite/user-data";
+import { buildUserDataCsv, downloadCsv } from "@/lib/export-csv";
+import { useTranslation } from "@/hooks/use-translation";
+import { useRouter } from "next/navigation";
+import { AppSelect } from "@/components/ui/app-select";
 import { useSession } from "@/components/require-session";
 import { getCategoryIcon } from "@/lib/category-utils";
-import { Bell, Download, Plus, Tag, Tags, Trash2, UserRound, Wallet } from "lucide-react";
+import { Bell, Download, Loader2, Plus, Tag, Tags, Trash2, UserRound, Wallet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 type SettingsTab = "perfil" | "preferencias" | "categorias" | "notificacoes" | "dados";
 
-const tabs: { id: SettingsTab; label: string; icon: typeof UserRound }[] = [
-  { id: "perfil", label: "Perfil", icon: UserRound },
-  { id: "preferencias", label: "Preferências", icon: Wallet },
-  { id: "categorias", label: "Categorias", icon: Tags },
-  { id: "notificacoes", label: "Notificações", icon: Bell },
-  { id: "dados", label: "Dados e Exportação", icon: Download },
+/** Abas por id estável — o rótulo visível vem sempre de `t()`. */
+const tabs: { id: SettingsTab; labelKey: string; icon: typeof UserRound }[] = [
+  { id: "perfil", labelKey: "settings.tabProfile", icon: UserRound },
+  { id: "preferencias", labelKey: "settings.tabPreferences", icon: Wallet },
+  { id: "categorias", labelKey: "settings.tabCategories", icon: Tags },
+  { id: "notificacoes", labelKey: "settings.tabNotifications", icon: Bell },
+  { id: "dados", labelKey: "settings.tabData", icon: Download },
 ];
 
+// Nomes gravados na BD (conteúdo do utilizador, como títulos de metas):
+// não são texto de UI, por isso não passam por `t()` — traduzir aqui
+// criaria categorias gravadas noutro idioma na conta do utilizador.
 const DEFAULT_CATEGORIES = ["Alimentação", "Transporte", "Moradia", "Saúde", "Lazer", "Assinaturas", "Salário"];
 
 const fieldClassName =
   "h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
 
   return (
     <div className="flex w-full flex-col gap-4 md:gap-6">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-5">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
-          Configurações
+          {t("settings.title")}
         </h1>
         <p className="mt-1.5 text-sm text-emerald-100/70">
-          Faça a gestão da sua conta e preferências do sistema
+          {t("settings.subtitle")}
         </p>
       </header>
 
       <div className="flex flex-col gap-8 md:flex-row">
-        <nav aria-label="Secções de configurações" className="w-full shrink-0 md:w-[250px]">
+        <nav aria-label={t("settings.navAria")} className="w-full shrink-0 md:w-[250px]">
           <ul className="flex flex-col gap-1">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -63,7 +78,7 @@ export default function SettingsPage() {
                     }
                   >
                     <tab.icon className="size-4 shrink-0" aria-hidden="true" />
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </button>
                 </li>
               );
@@ -71,7 +86,10 @@ export default function SettingsPage() {
           </ul>
         </nav>
 
-        <section className="min-w-0 flex-1 rounded-xl border border-zinc-700/50 bg-black p-6">
+        {/* Semi-transparente + blur: um bg opaco aqui tapava o fundo
+            estilizado (partículas/blobs) do layout pai em quase todo
+            o ecrã de Configurações. */}
+        <section className="min-w-0 flex-1 rounded-xl border border-zinc-700/50 bg-zinc-950/50 p-6 backdrop-blur-sm">
           <div className={activeTab === "perfil" ? undefined : "hidden"}>
             <ProfilePanel />
           </div>
@@ -94,6 +112,7 @@ export default function SettingsPage() {
 }
 
 function ProfilePanel() {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { syncUser } = useSession();
   const [name, setName] = useState("");
@@ -123,18 +142,21 @@ function ProfilePanel() {
       })
       .catch(() => {
         if (!active) return;
-        toast.error("Não foi possível carregar o perfil.");
+        toast.error(t("settings.profileLoadError"));
       });
 
     return () => {
       active = false;
     };
+    // `t` muda com o idioma; recarregar o perfil por troca de idioma seria
+    // um fetch desnecessário — o toast só é usado em caso de erro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleAvatarChange(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Selecione um ficheiro de imagem.");
+      toast.error(t("settings.selectImageError"));
       return;
     }
 
@@ -150,7 +172,7 @@ function ProfilePanel() {
     event.preventDefault();
     if (isLoading) return;
 
-    const toastId = toast.loading("A guardar alterações...");
+    const toastId = toast.loading(t("settings.saving"));
     setIsLoading(true);
 
     try {
@@ -164,9 +186,9 @@ function ProfilePanel() {
       setAvatarFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       syncUser(updated);
-      toast.success("Perfil atualizado com sucesso!", { id: toastId });
+      toast.success(t("settings.profileUpdated"), { id: toastId });
     } catch {
-      toast.error("Não foi possível atualizar o perfil.", { id: toastId });
+      toast.error(t("settings.profileUpdateError"), { id: toastId });
     } finally {
       setIsLoading(false);
     }
@@ -175,8 +197,8 @@ function ProfilePanel() {
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-50">Perfil</h2>
-        <p className="mt-1 text-sm text-zinc-400">Atualize os dados visíveis da sua conta.</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{t("settings.profileTitle")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{t("settings.profileSubtitle")}</p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -203,14 +225,14 @@ function ProfilePanel() {
             onClick={() => fileInputRef.current?.click()}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-950 px-4 text-sm font-medium text-zinc-100 transition-colors duration-200 hover:border-zinc-600 hover:bg-zinc-800"
           >
-            Alterar avatar
+            {t("settings.changeAvatar")}
           </button>
-          <p className="mt-2 text-xs text-zinc-500">PNG ou JPG, até alguns MB.</p>
+          <p className="mt-2 text-xs text-zinc-500">{t("settings.avatarHint")}</p>
         </div>
       </div>
 
       <label className="flex flex-col gap-1.5 text-sm text-zinc-300">
-        Nome
+        {t("settings.name")}
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -221,7 +243,7 @@ function ProfilePanel() {
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm text-zinc-300">
-        Email
+        {t("settings.email")}
         <input
           type="email"
           value={email}
@@ -238,7 +260,7 @@ function ProfilePanel() {
           disabled={isLoading}
           className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Guardar Alterações
+          {t("settings.saveChanges")}
         </button>
       </div>
     </form>
@@ -246,55 +268,56 @@ function ProfilePanel() {
 }
 
 function PreferencesPanel() {
+  const { t } = useTranslation();
   const { currency, setCurrency, privacyMode, togglePrivacyMode } = usePreferences();
+
+  const currencyOptions = [
+    { value: "BRL", label: t("settings.currencyBRL") },
+    { value: "USD", label: t("settings.currencyUSD") },
+    { value: "EUR", label: t("settings.currencyEUR") },
+  ] as const;
 
   function handleTogglePrivacy() {
     const next = !privacyMode;
     togglePrivacyMode();
-    toast.success(
-      next
-        ? "Modo de privacidade ativado. Os saldos estão ocultos."
-        : "Modo de privacidade desativado. Os saldos estão visíveis.",
-    );
+    toast.success(next ? t("settings.privacyActivated") : t("settings.privacyDeactivated"));
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-50">Preferências</h2>
-        <p className="mt-1 text-sm text-zinc-400">Defina como os valores aparecem no gestor.</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{t("settings.preferencesTitle")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{t("settings.preferencesSubtitle")}</p>
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm text-zinc-300">
-        Moeda Principal
-        <select
+      <div className="flex flex-col gap-1.5 text-sm text-zinc-300">
+        <span id="settings-currency-label">{t("settings.mainCurrency")}</span>
+        <AppSelect
           value={currency}
-          onChange={(event) => {
-            const value = event.target.value;
+          onChange={(value) => {
             if (value !== "BRL" && value !== "USD" && value !== "EUR") return;
             setCurrency(value);
-            const label = event.target.selectedOptions[0]?.text ?? value;
-            toast.success(`Moeda atualizada para ${label}`);
+            const label =
+              currencyOptions.find((option) => option.value === value)?.label ?? value;
+            toast.success(t("settings.currencyUpdated", { label }));
           }}
-          className={fieldClassName}
-        >
-          <option value="BRL">BRL — Real brasileiro</option>
-          <option value="USD">USD — Dólar americano</option>
-          <option value="EUR">EUR — Euro</option>
-        </select>
-      </label>
+          ariaLabelledBy="settings-currency-label"
+          options={currencyOptions}
+          buttonClassName="flex h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-left text-sm text-zinc-100 outline-none transition-colors duration-200 hover:border-zinc-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+      </div>
 
       <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-zinc-100">Modo de Privacidade (Ocultar saldos)</p>
+          <p className="text-sm font-medium text-zinc-100">{t("settings.privacyMode")}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            {privacyMode ? "Os saldos estão ocultos." : "Os saldos estão visíveis."}
+            {privacyMode ? t("settings.privacyOn") : t("settings.privacyOff")}
           </p>
         </div>
         <Toggle
           checked={privacyMode}
           onChange={handleTogglePrivacy}
-          label="Modo de Privacidade (Ocultar saldos)"
+          label={t("settings.privacyMode")}
         />
       </div>
     </div>
@@ -302,6 +325,7 @@ function PreferencesPanel() {
 }
 
 function CategoriesPanel() {
+  const { t } = useTranslation();
   const { user } = useSession();
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -319,7 +343,7 @@ function CategoriesPanel() {
       })
       .catch(() => {
         if (!active) return;
-        toast.error("Não foi possível carregar as categorias.");
+        toast.error(t("settings.categoriesLoadError"));
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -328,6 +352,7 @@ function CategoriesPanel() {
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.$id]);
 
   async function addCategory() {
@@ -338,7 +363,7 @@ function CategoriesPanel() {
       (category) => category.name.localeCompare(name, "pt-BR", { sensitivity: "accent" }) === 0,
     );
     if (alreadyExists) {
-      toast.error("Essa categoria já existe.");
+      toast.error(t("settings.categoryExists"));
       return;
     }
 
@@ -349,9 +374,9 @@ function CategoriesPanel() {
         [...current, created].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
       );
       setNewCategoryName("");
-      toast.success("Categoria criada com sucesso!");
+      toast.success(t("settings.categoryCreated"));
     } catch {
-      toast.error("Não foi possível criar a categoria.");
+      toast.error(t("settings.categoryCreateError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -365,9 +390,9 @@ function CategoriesPanel() {
       await Promise.all(DEFAULT_CATEGORIES.map((name) => createCategory(user.$id, name)));
       const documents = await getCategories(user.$id);
       setCategories(documents);
-      toast.success("Categorias padrão criadas!");
+      toast.success(t("settings.defaultCategoriesCreated"));
     } catch {
-      toast.error("Não foi possível criar as categorias padrão.");
+      toast.error(t("settings.defaultCategoriesError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -380,9 +405,9 @@ function CategoriesPanel() {
     try {
       await deleteCategory(category.$id);
       setCategories((current) => current.filter((item) => item.$id !== category.$id));
-      toast.success("Categoria excluída.");
+      toast.success(t("settings.categoryDeleted"));
     } catch {
-      toast.error("Não foi possível excluir a categoria.");
+      toast.error(t("settings.categoryDeleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -391,8 +416,8 @@ function CategoriesPanel() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-50">Categorias</h2>
-        <p className="mt-1 text-sm text-zinc-400">Organize receitas e despesas por tipo.</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{t("settings.categoriesTitle")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{t("settings.categoriesSubtitle")}</p>
       </div>
 
       {isLoading ? (
@@ -404,7 +429,7 @@ function CategoriesPanel() {
         <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-zinc-800 bg-zinc-950 px-6 py-10 text-center">
           <Tag className="size-8 text-zinc-400" aria-hidden="true" />
           <p className="max-w-sm text-sm text-zinc-400">
-            Nenhuma categoria encontrada. Que tal começar com as essenciais?
+            {t("settings.noCategories")}
           </p>
           <button
             type="button"
@@ -412,7 +437,7 @@ function CategoriesPanel() {
             disabled={isSubmitting}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Criar Categorias Padrão
+            {t("settings.createDefaultCategories")}
           </button>
         </div>
       ) : (
@@ -433,7 +458,7 @@ function CategoriesPanel() {
                 type="button"
                 onClick={() => removeCategory(category)}
                 disabled={deletingId === category.$id}
-                aria-label={`Excluir ${category.name}`}
+                aria-label={t("settings.deleteCategoryAria", { name: category.name })}
                 className="rounded-lg p-2 text-zinc-500 transition-colors duration-200 hover:bg-rose-500/10 hover:text-rose-500 disabled:opacity-50"
               >
                 <Trash2 className="size-4" aria-hidden="true" />
@@ -446,7 +471,7 @@ function CategoriesPanel() {
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <label className="sr-only" htmlFor="new-category">
-          Nome da nova categoria
+          {t("settings.newCategoryName")}
         </label>
         <input
           id="new-category"
@@ -458,7 +483,7 @@ function CategoriesPanel() {
               void addCategory();
             }
           }}
-          placeholder="Nome da categoria"
+          placeholder={t("settings.categoryNamePlaceholder")}
           disabled={isSubmitting}
           className={fieldClassName}
         />
@@ -469,7 +494,7 @@ function CategoriesPanel() {
           className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nova Categoria
+          {t("settings.newCategory")}
         </button>
       </div>
     </div>
@@ -477,82 +502,147 @@ function CategoriesPanel() {
 }
 
 function NotificationsPanel() {
-  const [dueAlerts, setDueAlerts] = useState(true);
-  const [weeklySummary, setWeeklySummary] = useState(false);
+  const { t } = useTranslation();
+  const { alertsEnabled, setAlertsEnabled, emailSummaryEnabled, setEmailSummaryEnabled } =
+    usePreferences();
+
+  // Guardar imediatamente (optimista): o PreferencesProvider persiste em
+  // localStorage e sincroniza para `account.prefs` do Appwrite.
+  function handleAlertsChange(next: boolean) {
+    setAlertsEnabled(next);
+    toast.success(next ? t("settings.dueAlertsOn") : t("settings.dueAlertsOff"));
+  }
+
+  function handleEmailSummaryChange(next: boolean) {
+    setEmailSummaryEnabled(next);
+    toast.success(next ? t("settings.emailSummaryOn") : t("settings.emailSummaryOff"));
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-50">Notificações</h2>
-        <p className="mt-1 text-sm text-zinc-400">Escolha quais alertas quer receber.</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{t("settings.notificationsTitle")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{t("settings.notificationsSubtitle")}</p>
       </div>
 
       <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-zinc-100">Alertas de vencimento</p>
-          <p className="mt-1 text-xs text-zinc-500">Avisos antes de contas e assinaturas vencerem.</p>
+          <p className="text-sm font-medium text-zinc-100">{t("settings.dueAlerts")}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {t("settings.dueAlertsDesc")}
+          </p>
         </div>
-        <Toggle checked={dueAlerts} onChange={setDueAlerts} label="Alertas de vencimento" />
+        <Toggle checked={alertsEnabled} onChange={handleAlertsChange} label={t("settings.dueAlerts")} />
       </div>
 
       <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-zinc-100">Resumo semanal</p>
-          <p className="mt-1 text-xs text-zinc-500">Um email com o fluxo de caixa da semana.</p>
+          <p className="text-sm font-medium text-zinc-100">{t("settings.emailSummary")}</p>
+          <p className="mt-1 text-xs text-zinc-500">{t("settings.emailSummaryDesc")}</p>
         </div>
-        <Toggle checked={weeklySummary} onChange={setWeeklySummary} label="Resumo semanal" />
+        <Toggle
+          checked={emailSummaryEnabled}
+          onChange={handleEmailSummaryChange}
+          label={t("settings.emailSummary")}
+        />
       </div>
     </div>
   );
 }
 
 function DataPanel() {
-  function exportCsv() {
-    const rows = [
-      ["tipo", "descricao", "valor"],
-      ["receita", "Salário", "8500.00"],
-      ["despesa", "Alimentação", "1550.00"],
-      ["despesa", "Transporte", "930.00"],
-    ];
-    const csv = rows.map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "projekt-fin-export.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  const { t } = useTranslation();
+  const { user } = useSession();
+  const router = useRouter();
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  async function handleExportCSV() {
+    if (isExporting) return;
+
+    setIsExporting(true);
+    const toastId = toast.loading(t("settings.preparingExport"));
+
+    try {
+      const data = await fetchAllUserData(user.$id);
+      const total = countUserData(data);
+
+      if (total === 0) {
+        toast.info(t("settings.noDataToExport"), { id: toastId });
+        return;
+      }
+
+      downloadCsv("projekt-fin-export.csv", buildUserDataCsv(data));
+      toast.success(
+        t(total === 1 ? "settings.exportDoneOne" : "settings.exportDoneMany", { count: total }),
+        { id: toastId },
+      );
+    } catch (error) {
+      console.error("Falha ao exportar dados:", error);
+      toast.error(t("settings.exportError"), { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    // 1) Apaga transações, metas (+ imagens), assinaturas e categorias.
+    //    Se falhar, lança e a sessão é mantida para poder tentar de novo.
+    await deleteAllUserData(user.$id);
+
+    // 2) Encerra a sessão atual e volta ao Login (mesmo se a sessão já tiver expirado).
+    try {
+      await account.deleteSession("current");
+    } catch (error) {
+      console.error("Falha ao encerrar a sessão após apagar a conta:", error);
+    }
+
+    toast.success(t("settings.accountDeleted"));
+    router.replace("/");
+    router.refresh();
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-50">Dados e Exportação</h2>
-        <p className="mt-1 text-sm text-zinc-400">Exporte um resumo ou encerre a conta.</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{t("settings.dataTitle")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{t("settings.dataSubtitle")}</p>
       </div>
 
       <button
         type="button"
-        onClick={exportCsv}
-        className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-100 transition-colors duration-200 hover:border-zinc-600 hover:bg-zinc-800"
+        onClick={() => void handleExportCSV()}
+        disabled={isExporting}
+        className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-100 transition-colors duration-200 hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <Download className="size-4" aria-hidden="true" />
-        Exportar dados (CSV)
+        {isExporting ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Download className="size-4" aria-hidden="true" />
+        )}
+        {isExporting ? t("settings.exporting") : t("settings.exportCsv")}
       </button>
 
       <div className="rounded-xl border border-red-900/50 p-5">
-        <h3 className="text-sm font-semibold text-red-300">Zona de risco</h3>
+        <h3 className="text-sm font-semibold text-red-300">{t("settings.dangerZone")}</h3>
         <p className="mt-1 text-sm text-zinc-400">
-          Apagar a conta remove os dados deste gestor. Esta ação não pode ser desfeita.
+          {t("settings.dangerZoneText")}
         </p>
         <button
           type="button"
+          onClick={() => setIsDeleteModalOpen(true)}
           className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-red-600 text-sm font-semibold text-white transition-colors duration-200 hover:bg-red-500"
         >
           <Trash2 className="size-4" aria-hidden="true" />
-          Apagar Conta
+          {t("settings.deleteAccount")}
         </button>
       </div>
+
+      <DeleteAccountModal
+        open={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteAccount}
+      />
     </div>
   );
 }

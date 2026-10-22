@@ -128,6 +128,38 @@ export async function getSubscriptions(userId: string, limit = 10, offset = 0) {
   );
 }
 
+const SUBSCRIPTION_PAGE_SIZE = 100;
+
+/** Todas as assinaturas do utilizador (pagina com cursor), para alertas/dashboard. */
+export async function getAllSubscriptions(userId: string) {
+  const documents: SubscriptionDocument[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 20; page += 1) {
+    const queries = [
+      Query.equal("userId", userId),
+      Query.orderAsc("nextDue"),
+      Query.limit(SUBSCRIPTION_PAGE_SIZE),
+    ];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+
+    const response = await databases.listDocuments<SubscriptionDocument>(
+      appwriteConfig.databaseId,
+      appwriteConfig.subscriptionsCollectionId,
+      queries,
+    );
+
+    documents.push(...response.documents);
+    if (response.documents.length < SUBSCRIPTION_PAGE_SIZE) break;
+
+    const nextCursor = response.documents[response.documents.length - 1]?.$id;
+    if (!nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+
+  return documents;
+}
+
 function toTransactionPayload(data: TransactionInput) {
   return {
     userId: data.userId,

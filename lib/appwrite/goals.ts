@@ -4,6 +4,7 @@
  * 2. Atributos:
  *    - userId (string, required)
  *    - title (string, required)
+ *    - description (string 255, optional)
  *    - targetAmount (float/double, required)
  *    - currentAmount (float/double, required)
  *    - targetDate (datetime ou string, required)
@@ -24,6 +25,7 @@ import { appwriteConfig, databases, storage } from "@/lib/appwrite/client";
 export type GoalDocument = Models.Document & {
   userId: string;
   title: string;
+  description?: string | null;
   targetAmount: number;
   currentAmount: number;
   targetDate: string;
@@ -35,6 +37,7 @@ export type GoalDocument = Models.Document & {
 export type GoalInput = {
   userId: string;
   title: string;
+  description?: string;
   targetAmount: number;
   currentAmount: number;
   targetDate: string;
@@ -95,7 +98,7 @@ export async function createGoal(goalData: GoalInput) {
     throw new Error("userId é obrigatório para criar uma meta.");
   }
 
-  const payload: Record<string, string | number | boolean> = {
+  const payload: Omit<GoalInput, "imageId"> & { imageId?: string } = {
     userId: goalData.userId,
     title: goalData.title.trim(),
     targetAmount: Number(goalData.targetAmount),
@@ -104,6 +107,11 @@ export async function createGoal(goalData: GoalInput) {
     category: goalData.category,
     isCompleted: Boolean(goalData.isCompleted),
   };
+
+  if (goalData.description !== undefined) {
+    // Atributo opcional (string, 255): envia "" para limpar / sem descrição.
+    payload.description = goalData.description.trim().slice(0, 255);
+  }
 
   if (goalData.imageId) {
     payload.imageId = goalData.imageId;
@@ -131,11 +139,21 @@ export async function updateGoal(documentId: string, data: UpdateGoalInput) {
   const payload: Partial<
     Pick<
       GoalDocument,
-      "title" | "targetAmount" | "currentAmount" | "targetDate" | "category" | "imageId" | "isCompleted"
+      | "title"
+      | "description"
+      | "targetAmount"
+      | "currentAmount"
+      | "targetDate"
+      | "category"
+      | "imageId"
+      | "isCompleted"
     >
   > = {};
 
   if (data.title !== undefined) payload.title = data.title.trim();
+  if (data.description !== undefined) {
+    payload.description = data.description.trim().slice(0, 255);
+  }
   if (data.targetAmount !== undefined) payload.targetAmount = Number(data.targetAmount);
   if (data.currentAmount !== undefined) payload.currentAmount = Number(data.currentAmount);
   if (data.targetDate !== undefined) payload.targetDate = data.targetDate;
@@ -182,6 +200,40 @@ export async function deleteGoal(documentId: string, imageId?: string | null) {
   if (imageId) {
     await deleteGoalImage(imageId);
   }
+}
+
+const GOAL_PAGE_SIZE = 100;
+
+/** Todas as metas do utilizador (pagina com cursor), para exportação/exclusão de conta. */
+export async function getAllGoals(userId: string) {
+  if (!appwriteConfig.goalsCollectionId) return [] as GoalDocument[];
+
+  const documents: GoalDocument[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 20; page += 1) {
+    const queries = [
+      Query.equal("userId", userId),
+      Query.orderDesc("$createdAt"),
+      Query.limit(GOAL_PAGE_SIZE),
+    ];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+
+    const response = await databases.listDocuments<GoalDocument>(
+      appwriteConfig.databaseId,
+      goalsCollectionId(),
+      queries,
+    );
+
+    documents.push(...response.documents);
+    if (response.documents.length < GOAL_PAGE_SIZE) break;
+
+    const nextCursor = response.documents[response.documents.length - 1]?.$id;
+    if (!nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+
+  return documents;
 }
 
 export async function getGoals(userId: string, limit = 10, offset = 0) {

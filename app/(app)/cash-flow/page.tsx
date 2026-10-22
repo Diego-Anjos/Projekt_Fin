@@ -1,6 +1,7 @@
 "use client";
 
 import { SpendingHeatmap } from "@/components/spending-heatmap";
+import { AppSelect } from "@/components/ui/app-select";
 import { CategoryBubbleChart, type CategoryBubble } from "@/components/ui/category-bubble-chart";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
@@ -20,6 +21,8 @@ import {
   type CashTransaction,
 } from "@/lib/cash-flow";
 import { getCategoryIcon, normalizeCategoryName } from "@/lib/category-utils";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import { ArrowDown, ArrowUp, Scale } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -46,8 +49,8 @@ function toCashTransaction(document: TransactionDocument): CashTransaction {
   };
 }
 
-function formatMonthYear(year: number, month: number) {
-  const label = new Intl.DateTimeFormat("pt-BR", {
+function formatMonthYear(year: number, month: number, bcp47 = "pt-BR") {
+  const label = new Intl.DateTimeFormat(bcp47, {
     month: "long",
     year: "numeric",
   }).format(new Date(year, month, 1));
@@ -55,8 +58,8 @@ function formatMonthYear(year: number, month: number) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function formatMonthName(year: number, month: number) {
-  const label = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(year, month, 1));
+function formatMonthName(year: number, month: number, bcp47 = "pt-BR") {
+  const label = new Intl.DateTimeFormat(bcp47, { month: "long" }).format(new Date(year, month, 1));
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -75,6 +78,8 @@ function categoryColor(name: string, index: number) {
 export default function CashFlowPage() {
   const { user } = useSession();
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
+  const bcp47 = localeToBcp47[locale];
   const [today] = useState(() => new Date());
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
@@ -103,7 +108,7 @@ export default function CashFlowPage() {
         if (!active) return;
         setTransactions([]);
         setSubscriptions([]);
-        setError("Não foi possível carregar as transações e assinaturas.");
+        setError(t("cashFlow.loadError"));
       } finally {
         if (active) setLoading(false);
       }
@@ -114,7 +119,7 @@ export default function CashFlowPage() {
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, t]);
 
   const options = useMemo(() => monthOptions(transactions, today), [transactions, today]);
 
@@ -189,37 +194,37 @@ export default function CashFlowPage() {
       <header className="flex flex-col gap-4 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-            Fluxo de Caixa
+            {t("cashFlow.title")}
           </h1>
           <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-            Análise de receitas, despesas e saldo do mês
+            {t("cashFlow.subtitle")}
           </p>
         </div>
-        <label className="flex shrink-0 flex-col gap-1.5 text-xs font-medium text-emerald-100/70">
-          Mês
-          <select
+        <div className="flex shrink-0 flex-col gap-1.5 text-xs font-medium text-emerald-100/70">
+          <span id="cash-flow-month-label">{t("cashFlow.month")}</span>
+          <AppSelect
             value={selectedValue}
-            onChange={(event) => selectMonth(event.target.value)}
-            aria-label="Selecionar mês e ano"
-            className="h-11 w-full min-w-0 rounded-lg border border-emerald-800/50 bg-[#041610] px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 sm:w-auto sm:min-w-44"
-          >
-            {monthChoices.map((option) => (
-              <option key={monthValue(option)} value={monthValue(option)}>
-                {formatMonthYear(option.year, option.month)}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={selectMonth}
+            ariaLabelledBy="cash-flow-month-label"
+            options={monthChoices.map((option) => ({
+              value: monthValue(option),
+              label: formatMonthYear(option.year, option.month, bcp47),
+            }))}
+            className="w-full sm:w-auto"
+            buttonClassName="flex h-11 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-lg border border-emerald-800/50 bg-[#041610] px-3 text-left text-sm text-zinc-100 outline-none transition-colors duration-200 hover:border-emerald-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-44"
+            menuClassName="right-0 w-52 sm:left-0 sm:right-auto"
+          />
+        </div>
       </header>
 
       {error ? <p className="text-sm text-rose-400">{error}</p> : null}
 
-      <section aria-label="Resumo mensal" aria-busy={loading} className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
+      <section aria-label={t("cashFlow.summaryAria")} aria-busy={loading} className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-zinc-400">Entradas</p>
-              <p className="text-xs text-zinc-500">Receitas</p>
+              <p className="text-sm font-medium text-zinc-400">{t("cashFlow.income")}</p>
+              <p className="text-xs text-zinc-500">{t("cashFlow.incomeDesc")}</p>
             </div>
             <span className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
               <ArrowUp className="size-5" aria-hidden="true" />
@@ -237,8 +242,8 @@ export default function CashFlowPage() {
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-zinc-400">Saídas</p>
-              <p className="text-xs text-zinc-500">Despesas</p>
+              <p className="text-sm font-medium text-zinc-400">{t("cashFlow.expenses")}</p>
+              <p className="text-xs text-zinc-500">{t("cashFlow.expensesDesc")}</p>
             </div>
             <span className="flex size-10 items-center justify-center rounded-lg bg-red-500/15 text-red-500">
               <ArrowDown className="size-5" aria-hidden="true" />
@@ -255,7 +260,7 @@ export default function CashFlowPage() {
 
         <article className="rounded-xl border border-zinc-700/50 bg-black p-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-zinc-400">Saldo Líquido</p>
+            <p className="text-sm font-medium text-zinc-400">{t("cashFlow.netBalance")}</p>
             <span className={`flex size-10 items-center justify-center rounded-lg ${balanceIconTone}`}>
               <Scale className="size-5" aria-hidden="true" />
             </span>
@@ -270,9 +275,9 @@ export default function CashFlowPage() {
         </article>
       </section>
 
-      <section aria-label="Análise gráfica" className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
+      <section aria-label={t("cashFlow.chartsAria")} className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
         <SpendingHeatmap
-          monthLabel={formatMonthName(year, month)}
+          monthLabel={formatMonthName(year, month, bcp47)}
           total={expense}
           days={heatmapDays}
           currency={currency}
@@ -280,7 +285,7 @@ export default function CashFlowPage() {
           loading={loading}
         />
 
-        <article aria-label="Despesas por categoria" className="rounded-xl border border-zinc-700/50 bg-black p-5">
+        <article aria-label={t("cashFlow.expensesByCategory")} className="rounded-xl border border-zinc-700/50 bg-black p-5">
           {loading ? (
             <div className="flex flex-col items-center">
               <div className="size-[300px] max-w-full animate-pulse rounded-full bg-zinc-900" />
@@ -289,7 +294,7 @@ export default function CashFlowPage() {
             </div>
           ) : bubbleData.length === 0 ? (
             <p className="flex h-64 items-center justify-center text-center text-sm text-zinc-400">
-              Nenhuma despesa registrada neste mês
+              {t("cashFlow.noExpensesMonth")}
             </p>
           ) : (
             <div className="flex flex-col items-center">
@@ -297,7 +302,7 @@ export default function CashFlowPage() {
                 <CategoryBubbleChart data={bubbleData} />
               </div>
               <p className="mt-6 text-center text-slate-400">
-                Gastos no mês de {formatMonthName(year, month)}
+                {t("cashFlow.expensesInMonth", { month: formatMonthName(year, month, bcp47) })}
               </p>
               <p className="mt-2 text-center text-3xl font-bold text-white">
                 {formatCurrency(expense, currency, privacyMode)}

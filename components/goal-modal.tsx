@@ -7,6 +7,7 @@ import {
   toCalendarIso,
 } from "@/components/ui/custom-date-picker";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
 import {
   createGoal,
   deleteGoalImage,
@@ -42,6 +43,7 @@ export type GoalCategory =
 export type FinancialGoal = {
   id: string;
   title: string;
+  description?: string;
   targetAmount: number;
   currentAmount: number;
   targetDate: string;
@@ -53,6 +55,9 @@ export type FinancialGoal = {
 
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
+
+const textareaClassName =
+  "w-full resize-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm leading-relaxed text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
 const CATEGORY_OPTIONS: {
   id: GoalCategory;
@@ -67,6 +72,16 @@ const CATEGORY_OPTIONS: {
   { id: "car", label: "Veículo", icon: Car },
   { id: "other", label: "Outro", icon: Target },
 ];
+
+const CATEGORY_LABEL_KEYS: Record<GoalCategory, string> = {
+  travel: "goals.categoryTravel",
+  emergency: "goals.categoryEmergency",
+  tech: "goals.categoryTech",
+  home: "goals.categoryHome",
+  education: "goals.categoryEducation",
+  car: "goals.categoryCar",
+  other: "goals.categoryOther",
+};
 
 type GoalModalProps = {
   open: boolean;
@@ -101,8 +116,10 @@ function GoalModalForm({
 }: Omit<GoalModalProps, "open"> & { goalToEdit: FinancialGoal | null }) {
   const { user } = useSession();
   const { currency } = usePreferences();
+  const { t } = useTranslation();
   const isEditing = goalToEdit !== null;
   const [title, setTitle] = useState(goalToEdit?.title ?? "");
+  const [description, setDescription] = useState(goalToEdit?.description ?? "");
   const [targetAmount, setTargetAmount] = useState(() =>
     goalToEdit ? amountToInput(goalToEdit.targetAmount, currency) : "",
   );
@@ -204,32 +221,32 @@ function GoalModalForm({
     const trimmedTitle = title.trim();
 
     if (!trimmedTitle) {
-      setError("Informe o nome da meta.");
+      setError(t("goalModal.titleError"));
       return;
     }
 
     if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
-      setError("Informe um valor alvo maior que zero.");
+      setError(t("goalModal.targetError"));
       return;
     }
 
     if (!Number.isFinite(parsedCurrent) || parsedCurrent < 0) {
-      setError("O valor inicial não pode ser negativo.");
+      setError(t("goalModal.initialNegativeError"));
       return;
     }
 
     if (parsedCurrent > parsedTarget) {
-      setError("O valor inicial não pode ser maior que o valor alvo.");
+      setError(t("goalModal.initialExceedsError"));
       return;
     }
 
     if (!targetDate) {
-      setError("Informe a data alvo.");
+      setError(t("goalModal.targetDateError"));
       return;
     }
 
     if (!user?.$id) {
-      setError("Sessão em falta. Entre novamente e tente outra vez.");
+      setError(t("goalModal.sessionMissing"));
       return;
     }
 
@@ -254,6 +271,7 @@ function GoalModalForm({
         isEditing && goalToEdit
           ? await updateGoal(goalToEdit.id, {
               title: trimmedTitle,
+              description: description.trim(),
               targetAmount: parsedTarget,
               currentAmount: parsedCurrent,
               targetDate: toCalendarIso(targetDate),
@@ -264,6 +282,7 @@ function GoalModalForm({
           : await createGoal({
               userId: user.$id,
               title: trimmedTitle,
+              description: description.trim(),
               targetAmount: parsedTarget,
               currentAmount: parsedCurrent,
               targetDate: toCalendarIso(targetDate),
@@ -284,6 +303,7 @@ function GoalModalForm({
       const goal: FinancialGoal = {
         id: document.$id,
         title: document.title,
+        description: document.description?.trim() ? document.description : undefined,
         targetAmount: Number(document.targetAmount),
         currentAmount: Number(document.currentAmount),
         targetDate: document.targetDate,
@@ -298,7 +318,7 @@ function GoalModalForm({
       };
 
       onSave(goal);
-      toast.success(isEditing ? "Meta atualizada com sucesso!" : "Meta criada com sucesso!");
+      toast.success(isEditing ? t("goalModal.updated") : t("goalModal.created"));
       onClose();
     } catch (submitError) {
       // Evita deixar órfã no Storage a imagem enviada se o documento falhar a guardar.
@@ -310,8 +330,8 @@ function GoalModalForm({
         submitError instanceof Error
           ? submitError.message
           : isEditing
-            ? "Falha ao atualizar a meta. Tente novamente."
-            : "Falha ao criar a meta. Tente novamente.";
+            ? t("goalModal.updateError")
+            : t("goalModal.createError");
       setError(message);
       toast.error(message);
     } finally {
@@ -337,38 +357,54 @@ function GoalModalForm({
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          aria-label="Fechar"
+          aria-label={t("common.close")}
           className="absolute top-4 right-4 rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-50"
         >
           <X className="size-5" aria-hidden="true" />
         </button>
 
         <h2 id="goal-modal-title" className="pr-10 text-xl font-semibold text-zinc-50">
-          {isEditing ? "Editar Meta" : "Nova Meta"}
+          {isEditing ? t("goalModal.editTitle") : t("goalModal.newTitle")}
         </h2>
         <p className="mt-1 mb-6 text-sm text-zinc-400">
           {isEditing
-            ? "Atualize os dados do seu objetivo financeiro"
-            : "Defina um objetivo financeiro e acompanhe o progresso"}
+            ? t("goalModal.editSubtitle")
+            : t("goalModal.newSubtitle")}
         </p>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <label className="flex flex-col gap-2 md:col-span-2">
-            <span className="text-sm font-medium text-zinc-300">Nome da Meta</span>
+            <span className="text-sm font-medium text-zinc-300">{t("goalModal.name")}</span>
             <input
               type="text"
               name="title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ex: Férias em Lisboa"
+              placeholder={t("goalModal.namePlaceholder")}
               required
               className={fieldClassName}
             />
           </label>
 
+          <label className="flex flex-col gap-2 md:col-span-2">
+            <span className="text-sm font-medium text-zinc-300">
+              {t("goalModal.description")} <span className="font-normal text-zinc-500">{t("goalModal.optional")}</span>
+            </span>
+            <textarea
+              name="description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={t("goalModal.descriptionPlaceholder")}
+              rows={2}
+              maxLength={255}
+              className={textareaClassName}
+            />
+            <span className="self-end text-xs text-zinc-500">{description.length}/255</span>
+          </label>
+
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              Valor Alvo ({getCurrencySymbol(currency)})
+              {t("goalModal.targetAmount", { symbol: getCurrencySymbol(currency) })}
             </span>
             <span className="relative block">
               <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-medium text-emerald-400 select-none">
@@ -391,7 +427,7 @@ function GoalModalForm({
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              {isEditing ? "Valor Atual" : "Valor Inicial"} ({getCurrencySymbol(currency)})
+              {isEditing ? t("goalModal.currentAmount", { symbol: getCurrencySymbol(currency) }) : t("goalModal.initialAmount", { symbol: getCurrencySymbol(currency) })}
             </span>
             <span className="relative block">
               <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-medium text-emerald-400 select-none">
@@ -412,7 +448,7 @@ function GoalModalForm({
           </label>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Data Alvo</span>
+            <span className="text-sm font-medium text-zinc-300">{t("goalModal.targetDate")}</span>
             <CustomDatePicker
               name="targetDate"
               selected={targetDate}
@@ -422,10 +458,10 @@ function GoalModalForm({
           </label>
 
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Categoria / Ícone</span>
+            <span className="text-sm font-medium text-zinc-300">{t("goalModal.category")}</span>
             <div
               role="radiogroup"
-              aria-label="Categoria da meta"
+              aria-label={t("goalModal.categoryAria")}
               className="mt-2 flex flex-wrap gap-2 md:gap-3"
             >
               {CATEGORY_OPTIONS.map((option) => {
@@ -438,8 +474,8 @@ function GoalModalForm({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    title={option.label}
-                    aria-label={option.label}
+                    title={t(CATEGORY_LABEL_KEYS[option.id])}
+                    aria-label={t(CATEGORY_LABEL_KEYS[option.id])}
                     onClick={() => setCategory(option.id)}
                     className={`flex size-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
                       selected
@@ -455,19 +491,19 @@ function GoalModalForm({
           </div>
 
           <div className="flex flex-col gap-2 md:col-span-2">
-            <span className="text-sm font-medium text-zinc-300">Foto de Inspiração</span>
+            <span className="text-sm font-medium text-zinc-300">{t("goalModal.photo")}</span>
             {imagePreview ? (
               <div className="relative h-40 w-full overflow-hidden rounded-xl border border-zinc-700/50 sm:h-48">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imagePreview}
-                  alt="Pré-visualização da inspiração"
+                  alt={t("goalModal.photoPreviewAlt")}
                   className="h-full w-full object-cover"
                 />
                 <button
                   type="button"
                   onClick={clearImagePreview}
-                  aria-label="Remover foto"
+                  aria-label={t("goalModal.removePhoto")}
                   className="absolute top-2 right-2 z-10 rounded-full bg-black/50 p-1.5 text-white backdrop-blur-md transition-colors hover:bg-red-500/80"
                 >
                   <X className="size-4" aria-hidden="true" />
@@ -477,7 +513,7 @@ function GoalModalForm({
               <label className="flex h-40 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/50 px-4 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-500/5 sm:h-48">
                 <Camera className="size-6 text-emerald-400/80" aria-hidden="true" />
                 <span className="text-sm text-zinc-400">
-                  Adicionar foto de inspiração (Opcional)
+                  {t("goalModal.addPhoto")}
                 </span>
                 <input
                   ref={fileInputRef}
@@ -503,7 +539,7 @@ function GoalModalForm({
               disabled={isSubmitting}
               className="h-12 rounded-xl border border-zinc-800 px-5 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:bg-zinc-900 disabled:opacity-60"
             >
-              Cancelar
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -512,11 +548,11 @@ function GoalModalForm({
             >
               {isSubmitting
                 ? isEditing
-                  ? "A guardar..."
-                  : "A criar meta..."
+                  ? t("goalModal.savingEdit")
+                  : t("goalModal.creating")
                 : isEditing
-                  ? "Guardar Alterações"
-                  : "Criar Meta"}
+                  ? t("subscriptions.saveChanges")
+                  : t("goalModal.createGoal")}
             </button>
           </div>
         </form>

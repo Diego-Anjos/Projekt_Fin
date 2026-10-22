@@ -4,6 +4,7 @@ import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
+import { AppSelect } from "@/components/ui/app-select";
 import { Pagination } from "@/components/ui/pagination";
 import {
   deleteTransaction,
@@ -11,6 +12,8 @@ import {
   getTransactions,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -33,20 +36,19 @@ function toPurchaseTransaction(document: TransactionDocument): PurchaseTransacti
   };
 }
 
-function formatDate(isoDate: string) {
+function formatDate(isoDate: string, bcp47: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
   if (!match) return isoDate;
 
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const formatted = new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day));
-  return formatted;
+  return new Intl.DateTimeFormat(bcp47).format(new Date(year, month - 1, day));
 }
 
-function formatMonthLabel(monthKey: string) {
+function formatMonthLabel(monthKey: string, bcp47: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  const label = new Intl.DateTimeFormat("pt-BR", {
+  const label = new Intl.DateTimeFormat(bcp47, {
     month: "long",
     year: "numeric",
   }).format(new Date(year, month - 1, 1));
@@ -54,15 +56,17 @@ function formatMonthLabel(monthKey: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-const statusLabel = {
-  Paid: "Pago",
-  Pending: "Pendente",
-} as const;
-
 export default function ComprasPage() {
   const { user } = useSession();
   const { confirm } = useConfirm();
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
+  const bcp47 = localeToBcp47[locale];
+
+  const statusLabel = {
+    Paid: t("transactions.paid"),
+    Pending: t("transactions.pending"),
+  } as const;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,9 +212,9 @@ export default function ComprasPage() {
 
   async function handleDelete(transaction: PurchaseTransaction) {
     const isConfirmed = await confirm({
-      title: "Excluir Transação",
-      description: `Tem certeza que deseja excluir a transação "${transaction.description}"? Esta ação não pode ser desfeita.`,
-      confirmText: "Excluir",
+      title: t("transactions.deleteTitle"),
+      description: t("transactions.deleteDescription", { description: transaction.description }),
+      confirmText: t("transactions.deleteConfirm"),
       variant: "danger",
     });
 
@@ -228,10 +232,10 @@ export default function ComprasPage() {
         setRefreshKey((key) => key + 1);
       }
       if (editing?.id === transaction.id) closeModal();
-      toast.success(`Transação "${transaction.description}" excluída com sucesso!`);
+      toast.success(t("transactions.deleted", { description: transaction.description }));
     } catch (error) {
       console.error("Erro ao excluir:", error);
-      toast.error("Falha ao excluir a transação. Tente novamente.");
+      toast.error(t("transactions.deleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -246,10 +250,10 @@ export default function ComprasPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-              Minhas Transações
+              {t("transactions.title")}
             </h1>
             <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-              Faça a gestão das suas receitas e despesas
+              {t("transactions.subtitle")}
             </p>
           </div>
         </div>
@@ -259,51 +263,54 @@ export default function ComprasPage() {
           className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nova Transação
+          {t("transactions.new")}
         </button>
       </header>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-zinc-700/50 bg-black px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-3">
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
-            <span className="sr-only">Mês</span>
-            <select
+          <div className="flex items-center gap-2 text-sm text-zinc-400">
+            <span className="sr-only">{t("transactions.month")}</span>
+            <AppSelect
               value={month}
-              onChange={(event) => {
-                setMonth(event.target.value);
+              onChange={(next) => {
+                setMonth(next);
                 setCurrentPage(1);
               }}
-              className={`${controlClassName} [color-scheme:dark]`}
-              aria-label="Mês"
-            >
-              <option value="all">Todos os meses</option>
-              {monthOptions.map((option) => (
-                <option key={option} value={option}>
-                  {formatMonthLabel(option)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
-            <span className="sr-only">Status</span>
-            <select
+              ariaLabel={t("transactions.month")}
+              options={[
+                { value: "all", label: t("transactions.allMonths") },
+                ...monthOptions.map((option) => ({
+                  value: option,
+                  label: formatMonthLabel(option, bcp47),
+                })),
+              ]}
+              className="min-w-44"
+              menuClassName="left-0 max-h-72 w-52"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-zinc-400">
+            <span className="sr-only">{t("transactions.status")}</span>
+            <AppSelect
               value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
+              onChange={(next) => {
+                setStatus(next);
                 setCurrentPage(1);
               }}
-              className={`${controlClassName} [color-scheme:dark]`}
-              aria-label="Status"
-            >
-              <option value="all">Todos os status</option>
-              <option value="Paid">Pago</option>
-              <option value="Pending">Pendente</option>
-            </select>
-          </label>
+              ariaLabel={t("transactions.status")}
+              options={[
+                { value: "all", label: t("transactions.allStatuses") },
+                { value: "Paid", label: t("transactions.paid") },
+                { value: "Pending", label: t("transactions.pending") },
+              ]}
+              className="min-w-40"
+              menuClassName="left-0 w-44"
+            />
+          </div>
         </div>
 
         <label className="relative block w-full lg:ml-auto lg:w-72">
-          <span className="sr-only">Buscar</span>
+          <span className="sr-only">{t("transactions.search")}</span>
           <Search
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-500"
             aria-hidden="true"
@@ -315,7 +322,7 @@ export default function ComprasPage() {
               setSearch(event.target.value);
               setCurrentPage(1);
             }}
-            placeholder="Buscar..."
+            placeholder={t("transactions.searchPlaceholder")}
             className={`${controlClassName} w-full pr-3 pl-10`}
           />
         </label>
@@ -326,27 +333,25 @@ export default function ComprasPage() {
           <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-xs tracking-wide text-zinc-400 uppercase">
-                <th className="w-[22%] px-3 py-3 font-medium md:px-5 md:py-4">Situação</th>
-                <th className="w-[34%] px-3 py-3 font-medium md:px-5 md:py-4">Descrição</th>
-                <th className="hidden w-[16%] px-3 py-3 font-medium sm:table-cell md:px-5 md:py-4">Categoria</th>
-                <th className="hidden w-[14%] px-3 py-3 font-medium md:table-cell md:px-5 md:py-4">Data</th>
-                <th className="w-[24%] px-3 py-3 text-right font-medium md:px-5 md:py-4">Valor</th>
-                <th className="w-[20%] px-3 py-3 text-right font-medium md:px-5 md:py-4">Ações</th>
+                <th className="w-[22%] px-3 py-3 font-medium md:px-5 md:py-4">{t("transactions.situation")}</th>
+                <th className="w-[34%] px-3 py-3 font-medium md:px-5 md:py-4">{t("transactions.description")}</th>
+                <th className="hidden w-[16%] px-3 py-3 font-medium sm:table-cell md:px-5 md:py-4">{t("transactions.category")}</th>
+                <th className="hidden w-[14%] px-3 py-3 font-medium md:table-cell md:px-5 md:py-4">{t("transactions.date")}</th>
+                <th className="w-[24%] px-3 py-3 text-right font-medium md:px-5 md:py-4">{t("transactions.amount")}</th>
+                <th className="w-[20%] px-3 py-3 text-right font-medium md:px-5 md:py-4">{t("transactions.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-10 text-center text-zinc-400">
-                    A carregar dados...
+                    {t("common.loading")}
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-gray-400">
-                    {isFiltered
-                      ? "Nenhuma transação encontrada."
-                      : "Nenhuma transação encontrada. Clique em 'Nova Transação' para começar."}
+                    {isFiltered ? t("transactions.emptyFiltered") : t("transactions.empty")}
                   </td>
                 </tr>
               ) : (
@@ -368,7 +373,7 @@ export default function ComprasPage() {
                     </td>
                     <td className="max-w-0 truncate px-3 py-3 font-medium text-zinc-100 md:px-5 md:py-4">{transaction.description}</td>
                     <td className="hidden max-w-0 truncate px-3 py-3 text-zinc-300 sm:table-cell md:px-5 md:py-4">{transaction.category}</td>
-                    <td className="hidden px-3 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-5 md:py-4">{formatDate(transaction.date)}</td>
+                    <td className="hidden px-3 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-5 md:py-4">{formatDate(transaction.date, bcp47)}</td>
                     <td
                       className={`px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums md:px-5 md:py-4 ${
                         privacyMode
@@ -387,7 +392,7 @@ export default function ComprasPage() {
                         <button
                           type="button"
                           onClick={() => openEditModal(transaction)}
-                          aria-label={`Editar ${transaction.description}`}
+                          aria-label={t("transactions.editAria", { description: transaction.description })}
                           className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-zinc-100"
                         >
                           <Pencil className="size-4" aria-hidden="true" />
@@ -396,7 +401,7 @@ export default function ComprasPage() {
                           type="button"
                           onClick={() => handleDelete(transaction)}
                           disabled={deletingId === transaction.id}
-                          aria-label={`Apagar ${transaction.description}`}
+                          aria-label={t("transactions.deleteAria", { description: transaction.description })}
                           className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-red-950 hover:text-red-400 disabled:opacity-50"
                         >
                           <Trash2 className="size-4" aria-hidden="true" />

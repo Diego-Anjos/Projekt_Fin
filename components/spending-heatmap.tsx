@@ -1,4 +1,5 @@
 import type { DailyExpense } from "@/lib/cash-flow";
+import { useTranslation } from "@/hooks/use-translation";
 import { formatCurrency } from "@/lib/utils";
 
 export function getHeatmapColor(amount: number, maxAmount: number) {
@@ -25,11 +26,12 @@ export function SpendingHeatmap({
   privacyMode,
   loading,
 }: SpendingHeatmapProps) {
+  const { t } = useTranslation();
   const maxDailySpend = days.reduce((max, day) => Math.max(max, day.amount), 0);
 
   return (
     <article className="rounded-xl border border-zinc-700/50 bg-[#0a0f0d] p-5">
-      <h2 className="text-xs text-slate-400">Gastos em {monthLabel}</h2>
+      <h2 className="text-xs text-slate-400">{t("cashFlow.spendingInMonth", { month: monthLabel })}</h2>
       {loading ? (
         <>
           <span className="mt-3 block h-8 w-40 animate-pulse rounded bg-white/5" />
@@ -47,14 +49,14 @@ export function SpendingHeatmap({
           <div
             className="mt-4 flex flex-wrap gap-1.5"
             role="img"
-            aria-label={`Mapa de calor dos gastos diários em ${monthLabel}`}
+            aria-label={t("cashFlow.heatmapAria", { month: monthLabel })}
           >
             {days.map((day) => (
               <div
                 key={day.day}
                 className={`h-5 w-5 rounded-sm transition-colors ${getHeatmapColor(day.amount, maxDailySpend)}`}
-                title={`Dia ${day.day}: ${formatCurrency(day.amount, currency, privacyMode)}`}
-                aria-label={`Dia ${day.day}: ${formatCurrency(day.amount, currency, privacyMode)}`}
+                title={t("cashFlow.dayLabel", { day: day.day, amount: formatCurrency(day.amount, currency, privacyMode) })}
+                aria-label={t("cashFlow.dayLabel", { day: day.day, amount: formatCurrency(day.amount, currency, privacyMode) })}
               />
             ))}
           </div>

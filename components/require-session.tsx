@@ -1,6 +1,7 @@
 "use client";
 
 import { account } from "@/lib/appwrite/client";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { usePreferences } from "@/contexts/preferences-context";
 import type { Models } from "appwrite";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,7 @@ export function useSession() {
 export function RequireSession({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { applyRemotePrefs } = usePreferences();
+  const { applyRemoteLanguage, t } = useLanguage();
   const [user, setUser] = useState<Models.User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +40,9 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
         const currentUser = await account.get();
         if (active) {
           applyRemotePrefs(currentUser.prefs);
+          // Idioma cross-device: prefs.language aprendido no login,
+          // mesmo que o LanguageProvider tenha arrancado sem sessão.
+          applyRemoteLanguage(currentUser.prefs);
           setUser(currentUser);
         }
       } catch {
@@ -54,7 +59,7 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [applyRemotePrefs, router]);
+  }, [applyRemotePrefs, applyRemoteLanguage, router]);
 
   async function logout() {
     await account.deleteSession("current");
@@ -74,7 +79,7 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
             className="size-10 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-400"
             aria-hidden="true"
           />
-          <p className="text-sm text-slate-400">A verificar sessão...</p>
+          <p className="text-sm text-slate-400">{t("common.verifyingSession")}</p>
         </div>
       </div>
     );

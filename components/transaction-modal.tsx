@@ -3,6 +3,7 @@
 import { useSession } from "@/components/require-session";
 import { CustomDatePicker, parseCalendarDate, toCalendarIso } from "@/components/ui/custom-date-picker";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
 import { createTransaction, getCategories, updateTransaction, type CategoryDocument } from "@/lib/appwrite/database";
 import { getCategoryIcon } from "@/lib/category-utils";
 import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
@@ -33,7 +34,7 @@ function CategoryGlyph({ name, className }: { name: string; className?: string }
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
-function collectValidationErrors(form: HTMLFormElement) {
+function collectValidationErrors(form: HTMLFormElement, invalidField: string) {
   const errors: Record<string, string> = {};
 
   for (const element of form.elements) {
@@ -46,7 +47,7 @@ function collectValidationErrors(form: HTMLFormElement) {
     }
 
     if (!element.name || element.disabled || element.validity.valid) continue;
-    errors[element.name] = element.validationMessage || "Campo inválido.";
+    errors[element.name] = element.validationMessage || invalidField;
   }
 
   return errors;
@@ -78,6 +79,7 @@ function TransactionModalForm({
   onSave,
 }: Omit<TransactionModalProps, "open">) {
   const { currency } = usePreferences();
+  const { t } = useTranslation();
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [amount, setAmount] = useState(
     transaction ? formatCurrencyInput(Math.round(transaction.amount * 100), currency) : "",
@@ -124,7 +126,7 @@ function TransactionModalForm({
       } catch (error) {
         if (!active) return;
         console.error("Falha ao carregar as categorias.", error);
-        toast.error("Não foi possível carregar as categorias.");
+        toast.error(t("transactionModal.categoriesLoadError"));
       } finally {
         if (active) setCategoriesLoading(false);
       }
@@ -135,7 +137,7 @@ function TransactionModalForm({
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, t]);
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -178,19 +180,19 @@ function TransactionModalForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const errors = collectValidationErrors(event.currentTarget);
+    const errors = collectValidationErrors(event.currentTarget, t("transactionModal.invalidField"));
     const parsedAmount = parseCurrencyToNumber(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = "Informe um valor maior que zero.";
+      errors.amount = t("transactionModal.amountError");
     }
 
     if (!date) {
-      errors.date = "Informe a data da transação.";
+      errors.date = t("transactionModal.dateError");
     }
 
     if (!category) {
-      errors.category = "Selecione uma categoria.";
+      errors.category = t("transactionModal.categoryError");
     }
 
     if (Object.keys(errors).length > 0 || !date) {
@@ -202,7 +204,7 @@ function TransactionModalForm({
     setAmountError("");
 
     if (!user?.$id) {
-      setSubmitError("Sessão em falta. Entre novamente e tente salvar.");
+      setSubmitError(t("transactionModal.sessionMissing"));
       return;
     }
 
@@ -233,13 +235,13 @@ function TransactionModalForm({
         date: response.date,
         status: response.status === "Pending" ? "Pending" : "Paid",
       });
-      toast.success(transaction ? "Transação atualizada com sucesso!" : "Transação salva com sucesso!");
+      toast.success(transaction ? t("transactionModal.updated") : t("transactionModal.created"));
       onClose();
     } catch (error) {
       console.error("Falha ao salvar a transação.", error);
-      const message = error instanceof Error ? error.message : "Falha ao salvar a transação.";
+      const message = error instanceof Error ? error.message : t("transactionModal.saveError");
       setSubmitError(message);
-      toast.error("Falha ao salvar a transação. Tente novamente.");
+      toast.error(t("transactionModal.saveError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -262,17 +264,17 @@ function TransactionModalForm({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Fechar"
+          aria-label={t("common.close")}
           className="absolute top-4 right-4 rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-zinc-100"
         >
           <X className="size-5" aria-hidden="true" />
         </button>
 
         <h2 id="transaction-modal-title" className="pr-10 text-xl font-semibold text-zinc-50">
-          {transaction ? "Editar Transação" : "Registrar Nova Transação"}
+          {transaction ? t("transactionModal.editTitle") : t("transactionModal.newTitle")}
         </h2>
         <p className="mt-1 mb-6 text-sm text-zinc-400">
-          Adicione os detalhes da sua compra ou entrada
+          {t("transactionModal.subtitle")}
         </p>
 
         <form
@@ -282,7 +284,7 @@ function TransactionModalForm({
           className="grid grid-cols-1 gap-6 md:grid-cols-2"
         >
           <fieldset className="col-span-1 md:col-span-2">
-            <legend className="mb-3 text-sm font-medium text-zinc-300">Tipo de Transação</legend>
+            <legend className="mb-3 text-sm font-medium text-zinc-300">{t("transactionModal.type")}</legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
@@ -294,7 +296,7 @@ function TransactionModalForm({
                     : "rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-sm font-semibold text-zinc-400 transition-colors duration-200 hover:border-emerald-800 hover:text-emerald-400"
                 }
               >
-                Entrada / Receita
+                {t("transactionModal.income")}
               </button>
               <button
                 type="button"
@@ -306,14 +308,14 @@ function TransactionModalForm({
                     : "rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-sm font-semibold text-zinc-400 transition-colors duration-200 hover:border-red-900 hover:text-red-400"
                 }
               >
-                Saída / Despesa
+                {t("transactionModal.expense")}
               </button>
             </div>
           </fieldset>
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              Valor ({getCurrencySymbol(currency)})
+              {t("transactionModal.amount", { symbol: getCurrencySymbol(currency) })}
             </span>
             <span className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 transition-colors duration-200 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
               <span className="text-xl font-medium text-emerald-400 select-none">
@@ -342,7 +344,7 @@ function TransactionModalForm({
           </label>
 
           <label className="flex h-full flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Data da Transação</span>
+            <span className="text-sm font-medium text-zinc-300">{t("transactionModal.date")}</span>
             <CustomDatePicker
               name="date"
               selected={date}
@@ -353,13 +355,13 @@ function TransactionModalForm({
           </label>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Descrição</span>
+            <span className="text-sm font-medium text-zinc-300">{t("transactionModal.description")}</span>
             <input
               type="text"
               name="description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Mercado da semana"
+              placeholder={t("transactionModal.descriptionPlaceholder")}
               required
               className={fieldClassName}
             />
@@ -367,7 +369,7 @@ function TransactionModalForm({
 
           <div className="flex flex-col gap-2">
             <span id="transaction-category-label" className="text-sm font-medium text-zinc-300">
-              Categoria
+              {t("transactionModal.category")}
             </span>
             <div ref={categoryMenuRef} className="relative">
               <button
@@ -380,14 +382,14 @@ function TransactionModalForm({
                 className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-emerald-500/30 bg-black/40 px-4 py-3 text-left text-slate-300 transition-colors focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {categoriesUnavailable ? (
-                  <span>Nenhuma categoria. Cadastre em Configurações</span>
+                  <span>{t("transactionModal.noCategories")}</span>
                 ) : category ? (
                   <span className="flex items-center gap-3">
                     <CategoryGlyph name={category} className="size-4 shrink-0 text-emerald-400" />
                     {category}
                   </span>
                 ) : (
-                  <span>Selecione uma categoria</span>
+                  <span>{t("transactionModal.selectCategory")}</span>
                 )}
                 <ChevronDown
                   className={`size-4 shrink-0 transition-transform ${isCategoryOpen ? "rotate-180" : ""}`}
@@ -398,13 +400,13 @@ function TransactionModalForm({
                 <div
                   role="listbox"
                   aria-labelledby="transaction-category-label"
-                  className="absolute top-full z-50 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-emerald-500/30 bg-[#0a110e] shadow-2xl"
+                  className="absolute top-full z-50 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 p-1 shadow-2xl shadow-black/60"
                 >
                   {categoriesLoading ? (
-                    <p className="px-4 py-3 text-sm text-zinc-500">A carregar categorias...</p>
+                    <p className="px-4 py-3 text-sm text-zinc-500">{t("transactionModal.loadingCategories")}</p>
                   ) : visibleCategories.length === 0 ? (
                     <p className="px-4 py-3 text-sm text-zinc-500">
-                      Nenhuma categoria. Cadastre em Configurações
+                      {t("transactionModal.noCategories")}
                     </p>
                   ) : (
                     visibleCategories.map((name) => {
@@ -420,8 +422,8 @@ function TransactionModalForm({
                             setCategory(name);
                             setIsCategoryOpen(false);
                           }}
-                          className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-emerald-500/10 ${
-                            isSelected ? "text-emerald-400" : "text-slate-300 hover:text-emerald-400"
+                          className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-zinc-800 ${
+                            isSelected ? "font-medium text-emerald-400" : "text-zinc-300"
                           }`}
                         >
                           <CategoryGlyph name={name} className="size-4 shrink-0" />
@@ -436,12 +438,12 @@ function TransactionModalForm({
           </div>
 
           <fieldset className="col-span-1 md:col-span-2">
-            <legend className="mb-3 text-sm font-medium text-zinc-300">Status</legend>
+            <legend className="mb-3 text-sm font-medium text-zinc-300">{t("transactionModal.status")}</legend>
             <div className="flex flex-wrap gap-3">
               {(
                 [
-                  ["Paid", "Pago"],
-                  ["Pending", "Pendente"],
+                  ["Paid", t("transactions.paid")],
+                  ["Pending", t("transactions.pending")],
                 ] as const
               ).map(([value, label]) => (
                 <label
@@ -479,7 +481,7 @@ function TransactionModalForm({
             disabled={isSubmitting}
             className="col-span-1 h-14 w-full rounded-xl bg-emerald-600 text-base font-semibold tracking-wide text-white transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60 md:col-span-2"
           >
-            {isSubmitting ? "A guardar..." : "Salvar Transação"}
+            {isSubmitting ? t("transactionModal.saving") : t("transactionModal.save")}
           </button>
         </form>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/hooks/use-translation";
 import { AlertTriangle, CircleCheck } from "lucide-react";
 import {
   createContext,
@@ -74,6 +75,7 @@ function ConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   const titleId = useId();
   const descriptionId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -145,7 +147,7 @@ function ConfirmDialog({
               onClick={onCancel}
               className="h-11 rounded-xl bg-zinc-800 px-4 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:bg-zinc-700"
             >
-              {options.cancelText ?? "Cancelar"}
+              {options.cancelText ?? t("common.cancel")}
             </button>
             <button
               ref={confirmRef}
@@ -157,7 +159,7 @@ function ConfirmDialog({
                   : "h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
               }
             >
-              {options.confirmText ?? "Confirmar"}
+              {options.confirmText ?? t("common.confirm")}
             </button>
           </div>
         </div>

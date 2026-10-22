@@ -1,6 +1,8 @@
 "use client";
 
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import { Info, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -32,14 +34,21 @@ function isBrapiQuote(value: unknown): value is BrapiQuote {
   );
 }
 
-const tabs: { id: TabId; label: string; badge: string }[] = [
-  { id: "acoes", label: "Ações", badge: "Ações" },
-  { id: "fiis", label: "FIIs", badge: "FIIs" },
-  { id: "etfs", label: "ETFs/BDRs", badge: "BDR" },
+/** Abas por id estável — o rótulo visível vem sempre de `t()`. */
+const tabs: { id: TabId; labelKey: string; badgeKey?: string }[] = [
+  { id: "acoes", labelKey: "investments.tabs.stocks" },
+  { id: "fiis", labelKey: "investments.tabs.fii" },
+  { id: "etfs", labelKey: "investments.tabs.etf", badgeKey: "investments.badgeEtfs" },
 ];
 
-function formatSignedPercent(value: number) {
-  const formatted = new Intl.NumberFormat("pt-BR", {
+const explanationKeys: Record<TabId, string> = {
+  acoes: "investments.explanationStocks",
+  fiis: "investments.explanationFiis",
+  etfs: "investments.explanationEtfs",
+};
+
+function formatSignedPercent(value: number, bcp47: string) {
+  const formatted = new Intl.NumberFormat(bcp47, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(Math.abs(value));
@@ -65,6 +74,7 @@ function screenerType(tab: TabId) {
 
 export default function InvestimentosPage() {
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabId>("acoes");
   const [assets, setAssets] = useState<BrapiQuote[]>([]);
@@ -74,6 +84,10 @@ export default function InvestimentosPage() {
   const [screenerError, setScreenerError] = useState<string | null>(null);
 
   const selectedTab = tabs.find((item) => item.id === activeTab) ?? tabs[0];
+  const selectedTabLabel = t(selectedTab.labelKey);
+  const selectedTabBadge = selectedTab.badgeKey
+    ? t(selectedTab.badgeKey)
+    : selectedTabLabel;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -105,7 +119,7 @@ export default function InvestimentosPage() {
             "error" in data &&
             typeof data.error === "string"
               ? data.error
-              : "Não foi possível carregar as cotações.";
+              : t("investments.loadError");
           setAssets([]);
           setScreenerError(message);
           return;
@@ -115,7 +129,7 @@ export default function InvestimentosPage() {
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
         setAssets([]);
-        setScreenerError("Não foi possível carregar as cotações.");
+        setScreenerError(t("investments.loadError"));
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -127,7 +141,7 @@ export default function InvestimentosPage() {
     void loadScreener();
 
     return () => controller.abort();
-  }, [activeTab]);
+  }, [activeTab, t]);
 
   const visibleScreener = useMemo(
     () => assets.filter((asset) => matchesQuery(query, asset.stock, asset.name)),
@@ -140,26 +154,17 @@ export default function InvestimentosPage() {
     safePage * itemsPerPage,
   );
 
-  const explanations: Record<TabId, string> = {
-    acoes:
-      "Ações representam pequenas frações de uma empresa. Ao comprar uma ação, você torna-se sócio do negócio, podendo lucrar com a valorização do papel ao longo do tempo ou com o recebimento de parte dos lucros (dividendos).",
-    fiis:
-      "Fundos Imobiliários (FIIs) reúnem recursos de vários investidores para aplicar no mercado imobiliário (shoppings, galpões, lajes corporativas). A principal vantagem é o recebimento de 'aluguéis' mensais, geralmente isentos de imposto de renda.",
-    etfs:
-      "ETFs são fundos que replicam índices de mercado (como o Ibovespa ou S&P 500), ideais para diversificação. BDRs são recibos negociados no Brasil que representam ações de grandes empresas estrangeiras (como Apple, Google e Disney).",
-  };
-
   return (
     <div className="flex w-full flex-col">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-8 sm:px-8">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-          Investimentos
+          {t("investments.title")}
         </h1>
         <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-          Explore ações, FIIs e outros ativos do mercado
+          {t("investments.subtitle")}
         </p>
         <label className="relative mt-6 block">
-          <span className="sr-only">Pesquisar ativo</span>
+          <span className="sr-only">{t("investments.searchAsset")}</span>
           <Search
             className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-emerald-300/80"
             aria-hidden="true"
@@ -170,7 +175,7 @@ export default function InvestimentosPage() {
               setQuery(event.target.value);
               setCurrentPage(1);
             }}
-            placeholder="Pesquisar ativo, ex: PETR4, MXRF11, AAPL34..."
+            placeholder={t("investments.searchPlaceholder")}
             className="h-14 w-full rounded-2xl border border-emerald-800/50 bg-[#041610] pr-4 pl-12 text-base text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
           />
         </label>
@@ -178,7 +183,7 @@ export default function InvestimentosPage() {
 
       <div
         role="tablist"
-        aria-label="Categorias de investimentos"
+        aria-label={t("investments.categoriesAria")}
         className="mt-6 flex gap-1 overflow-x-auto border-b border-zinc-800"
       >
         {tabs.map((item) => {
@@ -197,22 +202,22 @@ export default function InvestimentosPage() {
                   : "shrink-0 border-b-2 border-transparent px-4 py-3 text-sm font-medium text-zinc-400 transition-colors duration-200 hover:text-zinc-200"
               }
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           );
         })}
       </div>
 
-      <section aria-label={selectedTab.label} aria-busy={isLoading} className="mt-8">
+      <section aria-label={selectedTabLabel} aria-busy={isLoading} className="mt-8">
         <div className="flex items-start gap-3 p-4 mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 backdrop-blur-sm">
           <Info className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden="true" />
-          <p className="text-sm leading-relaxed text-emerald-100/80">{explanations[activeTab]}</p>
+          <p className="text-sm leading-relaxed text-emerald-100/80">{t(explanationKeys[activeTab])}</p>
         </div>
 
         <div className="flex flex-col gap-4">
         {isLoading ? (
           <p role="status" className="px-2 py-10 text-center text-sm text-zinc-400">
-            A carregar cotações ao vivo...
+            {t("investments.loadingQuotes")}
           </p>
         ) : screenerError ? (
           <p
@@ -223,7 +228,7 @@ export default function InvestimentosPage() {
           </p>
         ) : pageAssets.length === 0 ? (
           <p className="rounded-xl border border-zinc-800 bg-black px-5 py-10 text-center text-sm text-zinc-400">
-            Nenhum ativo encontrado em {selectedTab.label}.
+            {t("investments.noAssetsFound", { tab: selectedTabLabel })}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -255,7 +260,7 @@ export default function InvestimentosPage() {
                           {asset.stock}
                         </h2>
                         <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-300 uppercase">
-                          {selectedTab.badge}
+                          {selectedTabBadge}
                         </span>
                       </div>
                       <p className="mt-1 truncate text-sm text-zinc-500">{asset.name}</p>
@@ -264,19 +269,19 @@ export default function InvestimentosPage() {
 
                   <div className="mt-6 flex items-end justify-between gap-3">
                     <div>
-                      <p className="text-xs text-zinc-500">Preço Atual</p>
+                      <p className="text-xs text-zinc-500">{t("investments.currentPrice")}</p>
                       <p className="mt-1 text-xl font-bold tracking-tight text-zinc-50">
                         {formatCurrency(asset.close, currency, privacyMode)}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-zinc-500">Variação (24h)</p>
+                      <p className="text-xs text-zinc-500">{t("investments.change24h")}</p>
                       <p
                         className={`mt-1 text-sm font-semibold ${
                           positive ? "text-emerald-400" : negative ? "text-rose-400" : "text-zinc-400"
                         }`}
                       >
-                        {formatSignedPercent(asset.change)}
+                        {formatSignedPercent(asset.change, localeToBcp47[locale])}
                       </p>
                     </div>
                   </div>
@@ -294,7 +299,7 @@ export default function InvestimentosPage() {
               disabled={safePage <= 1}
               className="h-10 rounded-lg border border-zinc-800 px-4 text-sm font-medium text-zinc-200 transition-colors duration-200 hover:border-emerald-500/50 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-800 disabled:hover:text-zinc-200"
             >
-              Anterior
+              {t("common.previous")}
             </button>
             <span className="text-sm text-zinc-500">
               {safePage} / {totalPages}
@@ -305,7 +310,7 @@ export default function InvestimentosPage() {
               disabled={safePage >= totalPages}
               className="h-10 rounded-lg border border-zinc-800 px-4 text-sm font-medium text-zinc-200 transition-colors duration-200 hover:border-emerald-500/50 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-800 disabled:hover:text-zinc-200"
             >
-              Próximo
+              {t("common.next")}
             </button>
           </div>
         ) : null}

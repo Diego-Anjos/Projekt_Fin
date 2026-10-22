@@ -1,5 +1,16 @@
 "use client";
 
+import { AiModelSelect } from "@/components/ui/ai-model-select";
+import {
+  createChatSession,
+  deleteChatSession,
+  generateChatTitle,
+  listChatSessions,
+  parseStoredMessages,
+  updateChatSession,
+  type ChatSessionDocument,
+  type StoredChatMessage,
+} from "@/lib/appwrite/chat-sessions";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
 import { AnimatePresence, motion } from "framer-motion";
@@ -32,17 +43,6 @@ const AI_MODELS = [
   { id: "gemini-3.6-flash", label: "3.6 Flash" },
   { id: "gemini-3.1-pro", label: "3.1 Pro" },
 ] as const;
-
-type HistoryItem = {
-  id: string;
-  title: string;
-};
-
-const INITIAL_HISTORY: HistoryItem[] = [
-  { id: "h1", title: "Análise de Gastos" },
-  { id: "h2", title: "Novo Salário" },
-  { id: "h3", title: "Poupança Mensal" },
-];
 
 const ROBOT_MAIN = "/projekt-fin-robo-aura-verde.gif";
 const ROBOT_HAPPY = "/Robô retrô com rosto feliz em LED.png";
@@ -157,8 +157,15 @@ export function AiCommandBar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
-  const [recentConversations, setRecentConversations] =
-    useState<HistoryItem[]>(INITIAL_HISTORY);
+  // Sessões persistidas (collection ChatSessions), $createdAt descendente.
+  const [recentConversations, setRecentConversations] = useState<ChatSessionDocument[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  // Fila de persistência: serializa create/update p/ nunca criar duplicados.
+  const persistChainRef = useRef<Promise<void>>(Promise.resolve());
+  // Incrementado ao fechar/carregar outra conversa: saves antigos são ignorados.
+  const conversationEpochRef = useRef(0);
   const [selectedModel, setSelectedModel] = useState<string>(AI_MODELS[0].id);
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -191,17 +198,27 @@ export function AiCommandBar() {
   useEffect(() => {
     if (!isExpanded) return;
 
+    // mousedown (não click!): ao selecionar um modelo, o onClick da opção
+    // fecha o menu do AppSelect e desmonta o <li> clicado; quando esse
+    // mesmo click chegava ao document, event.target já estava destacado
+    // da árvore, `contains(target)` devolvia false e o chat inteiro
+    // fechava como se fosse um clique fora. No mousedown o alvo ainda
+    // está montado, por isso a verificação é fiável. composedPath() é a
+    // segunda linha de defesa (inclui o caminho capturado no dispatch).
     function handleClickOutside(event: MouseEvent) {
+      const container = containerRef.current;
+      if (!container) return;
       if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        event.composedPath().includes(container) ||
+        container.contains(event.target as Node)
       ) {
-        setIsExpanded(false);
+        return;
       }
+      setIsExpanded(false);
     }
 
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isExpanded]);
 
   useEffect(() => {
@@ -222,7 +239,82 @@ export function AiCommandBar() {
     return () => window.clearInterval(intervalId);
   }, [isLoading]);
 
+  function setActiveSessionId(next: string | null) {
+    sessionIdRef.current = next;
+    setSessionId(next);
+  }
+
+  // Lista as sessões do utilizador (mais recentes primeiro). Falhas de
+  // rede/coleção em falta degradam p/ lista vazia — o chat nunca quebra.
+  useEffect(() => {
+    let active = true;
+    listChatSessions(user.$id)
+      .then((documents) => {
+        if (active) setRecentConversations(documents);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar o histórico de chat:", error);
+        if (active) setRecentConversations([]);
+      })
+      .finally(() => {
+        if (active) setIsLoadingSessions(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user.$id]);
+
+  /**
+   * Persiste a conversa sem bloquear o chat. Primeira interação real
+   * (ainda sem sessionId): gera o título por IA e cria o documento.
+   * Seguintes: apenas updateDocument com o array completo de mensagens.
+   */
+  function persistConversation(conversation: StoredChatMessage[], epoch: number) {
+    persistChainRef.current = persistChainRef.current
+      .catch(() => {})
+      .then(async () => {
+        if (epoch !== conversationEpochRef.current) return; // conversa já trocou
+        try {
+          const currentSessionId = sessionIdRef.current;
+          if (!currentSessionId) {
+            const title = await generateChatTitle(conversation);
+            if (epoch !== conversationEpochRef.current) return;
+            const created = await createChatSession({
+              userId: user.$id,
+              title,
+              messages: conversation,
+            });
+            setActiveSessionId(created.$id);
+            setRecentConversations((current) => [
+              created,
+              ...current.filter((item) => item.$id !== created.$id),
+            ]);
+          } else {
+            const updated = await updateChatSession(currentSessionId, conversation);
+            setRecentConversations((current) =>
+              current.map((item) => (item.$id === updated.$id ? updated : item)),
+            );
+          }
+        } catch (error) {
+          // Appwrite indisponível/coleção em falta: conversa fica só local.
+          console.error("Falha ao guardar a sessão de chat:", error);
+        }
+      });
+  }
+
+  function handleLoadSession(session: ChatSessionDocument) {
+    const stored = parseStoredMessages(session.messages) as ChatMessage[];
+    conversationEpochRef.current += 1;
+    setActiveSessionId(session.$id);
+    setMessages([QUANTUM_WELCOME, ...stored]);
+    setIsChatVisible(true);
+    setIsExpanded(true);
+    setShowHistory(false);
+  }
+
   function handleClose() {
+    conversationEpochRef.current += 1;
+    setActiveSessionId(null);
     setMessages([QUANTUM_WELCOME]);
     setIsChatVisible(true);
     setShowHistory(false);
@@ -237,7 +329,14 @@ export function AiCommandBar() {
   }
 
   function handleDeleteHistoryItem(id: string) {
-    setRecentConversations((current) => current.filter((item) => item.id !== id));
+    setRecentConversations((current) => current.filter((item) => item.$id !== id));
+    if (sessionIdRef.current === id) {
+      conversationEpochRef.current += 1;
+      setActiveSessionId(null);
+    }
+    void deleteChatSession(id).catch((error) => {
+      console.error("Falha ao apagar a sessão de chat:", error);
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -287,15 +386,21 @@ export function AiCommandBar() {
           : "neutral";
 
       setIsAiAvailable(true);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: data.response as string,
-          emotion,
-        },
-      ]);
+      const assistantMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: data.response as string,
+        emotion,
+      };
+      setMessages((current) => [...current, assistantMessage]);
+      // Guardar sem bloquear: 1.ª interação cria a sessão (com título IA),
+      // seguintes só atualizam o mesmo documento.
+      persistConversation(
+        [...nextMessages, assistantMessage].filter(
+          (message) => message.id !== QUANTUM_WELCOME.id,
+        ),
+        conversationEpochRef.current,
+      );
     } catch (error) {
       setIsAiAvailable(false);
       const message =
@@ -353,16 +458,22 @@ export function AiCommandBar() {
                         Conversas Recentes
                       </p>
                       <ul className="flex flex-col gap-1">
-                        {recentConversations.length === 0 ? (
+                        {isLoadingSessions ? (
+                          <li className="px-2.5 py-2 text-xs text-zinc-500">
+                            A carregar conversas…
+                          </li>
+                        ) : recentConversations.length === 0 ? (
                           <li className="px-2.5 py-2 text-xs text-zinc-500">
                             Nenhuma conversa recente.
                           </li>
                         ) : (
                           recentConversations.map((item) => (
-                            <li key={item.id}>
+                            <li key={item.$id}>
                               <div className="group flex w-full items-center justify-between rounded-lg p-2 text-sm text-zinc-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-50">
                                 <button
                                   type="button"
+                                  onClick={() => handleLoadSession(item)}
+                                  aria-current={sessionId === item.$id || undefined}
                                   className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
                                 >
                                   <MessageSquare
@@ -375,7 +486,7 @@ export function AiCommandBar() {
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    handleDeleteHistoryItem(item.id);
+                                    handleDeleteHistoryItem(item.$id);
                                   }}
                                   className="ml-2 flex shrink-0 rounded p-1 text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
                                   title="Apagar conversa"
@@ -435,26 +546,12 @@ export function AiCommandBar() {
                         className="pointer-events-none size-3.5 text-emerald-500/50"
                         aria-hidden="true"
                       />
-                      <label htmlFor="ai-model-select" className="sr-only">
-                        Modelo de IA
-                      </label>
-                      <select
-                        id="ai-model-select"
+                      <AiModelSelect
+                        models={AI_MODELS}
                         value={selectedModel}
                         disabled={isLoading}
-                        onChange={(event) => setSelectedModel(event.target.value)}
-                        className="cursor-pointer appearance-none rounded-full border border-emerald-500/20 bg-white/5 py-1.5 pr-7 pl-3 text-xs font-medium text-emerald-100 outline-none backdrop-blur-sm transition-colors hover:border-emerald-500/40 hover:bg-white/10 focus:border-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                      >
-                        {AI_MODELS.map((model) => (
-                          <option
-                            key={model.id}
-                            value={model.id}
-                            className="bg-[#0a0f0d] text-zinc-100"
-                          >
-                            {model.label}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setSelectedModel}
+                      />
                     </div>
                   </div>
 

@@ -1,5 +1,6 @@
 import { CompanyLogo } from "@/components/company-logo";
 import type { Subscription } from "@/types/dashboard";
+import { useTranslation } from "@/hooks/use-translation";
 import Link from "next/link";
 
 export function RecurringSubscriptions({
@@ -9,17 +10,18 @@ export function RecurringSubscriptions({
   subscriptions: Subscription[];
   formatCurrency: (value: number) => string;
 }) {
+  const { t } = useTranslation();
   return (
     <article id="subscriptions" className="min-w-0 rounded-xl border border-zinc-700/50 bg-black p-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-zinc-100">Assinaturas Recorrentes</h3>
+        <h3 className="text-sm font-semibold text-zinc-100">{t("widgets.recurringSubscriptions")}</h3>
         <Link href="/subscriptions" className="text-xs font-medium text-emerald-500">
-          View all
+          {t("widgets.viewAll")}
         </Link>
       </div>
 
       {subscriptions.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-400">Nenhuma assinatura recorrente.</p>
+        <p className="mt-4 text-sm text-zinc-400">{t("widgets.noRecurringSubscriptions")}</p>
       ) : (
         <ul className="mt-4 flex flex-col gap-4">
           {subscriptions.map((item) => (

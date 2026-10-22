@@ -7,23 +7,14 @@ import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
 import { Pagination } from "@/components/ui/pagination";
 import { deleteSubscription, getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const ITEMS_PER_PAGE = 10;
-
-const cycleLabel = {
-  monthly: "Mensal",
-  yearly: "Anual",
-} as const;
-
-const paymentLabel = {
-  credit: "Cartão de Crédito",
-  pix: "PIX",
-  boleto: "Boleto",
-} as const;
 
 function toServiceSubscription(document: SubscriptionDocument): ServiceSubscription {
   return {
@@ -39,20 +30,33 @@ function toServiceSubscription(document: SubscriptionDocument): ServiceSubscript
   };
 }
 
-function formatDate(isoDate: string) {
+function formatDate(isoDate: string, bcp47: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
   if (!match) return isoDate;
 
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day));
+  return new Intl.DateTimeFormat(bcp47).format(new Date(year, month - 1, day));
 }
 
 export default function SubscriptionsPage() {
   const { user } = useSession();
   const { confirm } = useConfirm();
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
+  const bcp47 = localeToBcp47[locale];
+
+  const cycleLabel = {
+    monthly: t("subscriptions.cycleMonthly"),
+    yearly: t("subscriptions.cycleYearly"),
+  } as const;
+
+  const paymentLabel = {
+    credit: t("subscriptions.paymentCredit"),
+    pix: t("subscriptions.paymentPix"),
+    boleto: t("subscriptions.paymentBoleto"),
+  } as const;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<ServiceSubscription | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -93,7 +97,7 @@ export default function SubscriptionsPage() {
         if (active) {
           setSubscriptions([]);
           setTotalItems(0);
-          toast.error("Falha ao carregar as assinaturas. Tente novamente.");
+          toast.error(t("subscriptions.loadError"));
         }
       } finally {
         if (active) setLoading(false);
@@ -105,7 +109,7 @@ export default function SubscriptionsPage() {
     return () => {
       active = false;
     };
-  }, [user.$id, currentPage, refreshKey]);
+  }, [user.$id, currentPage, refreshKey, t]);
 
   function openCreateModal() {
     setEditingSubscription(null);
@@ -124,9 +128,9 @@ export default function SubscriptionsPage() {
 
   async function handleDeleteSubscription(subscription: ServiceSubscription) {
     const isConfirmed = await confirm({
-      title: "Excluir Assinatura",
-      description: `Tem certeza que deseja excluir a assinatura "${subscription.name}"? Esta ação não pode ser desfeita.`,
-      confirmText: "Excluir",
+      title: t("subscriptions.deleteTitle"),
+      description: t("subscriptions.deleteDescription", { name: subscription.name }),
+      confirmText: t("subscriptions.deleteConfirm"),
       variant: "danger",
     });
 
@@ -144,10 +148,10 @@ export default function SubscriptionsPage() {
       if (editingSubscription?.id === subscription.id) {
         closeModal();
       }
-      toast.success(`Assinatura "${subscription.name}" excluída com sucesso!`);
+      toast.success(t("subscriptions.deleted", { name: subscription.name }));
     } catch (error) {
       console.error("Erro ao excluir:", error);
-      toast.error("Falha ao excluir a assinatura. Tente novamente.");
+      toast.error(t("subscriptions.deleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -174,10 +178,10 @@ export default function SubscriptionsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-              Minhas Assinaturas
+              {t("subscriptions.title")}
             </h1>
             <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-              Gerencie seus serviços recorrentes
+              {t("subscriptions.subtitle")}
             </p>
           </div>
         </div>
@@ -187,17 +191,14 @@ export default function SubscriptionsPage() {
           className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nova Assinatura
+          {t("subscriptions.new")}
         </button>
       </header>
 
       {loading ? (
-        <p className="w-full py-12 text-center text-zinc-400">A carregar dados...</p>
+        <p className="w-full py-12 text-center text-zinc-400">{t("common.loading")}</p>
       ) : subscriptions.length === 0 ? (
-        <div className="w-full py-12 text-center text-gray-400">
-          Nenhuma assinatura recorrente encontrada. Clique em &apos;Nova Assinatura&apos; para
-          registar os seus serviços.
-        </div>
+        <div className="w-full py-12 text-center text-gray-400">{t("subscriptions.empty")}</div>
       ) : (
         <>
         <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4">
@@ -210,14 +211,14 @@ export default function SubscriptionsPage() {
                 <CompanyLogo name={subscription.name} />
                 <div className="flex items-center gap-2">
                   <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                    Ativa
+                    {t("subscriptions.active")}
                   </span>
                   <button
                     type="button"
                     onClick={() => handleEditSubscription(subscription)}
                     className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
-                    title="Editar assinatura"
-                    aria-label={`Editar ${subscription.name}`}
+                    title={t("subscriptions.edit")}
+                    aria-label={t("subscriptions.editAria", { name: subscription.name })}
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -226,8 +227,8 @@ export default function SubscriptionsPage() {
                     onClick={() => handleDeleteSubscription(subscription)}
                     disabled={deletingId === subscription.id}
                     className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                    title="Excluir assinatura"
-                    aria-label={`Excluir ${subscription.name}`}
+                    title={t("subscriptions.delete")}
+                    aria-label={t("subscriptions.deleteAria", { name: subscription.name })}
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -245,13 +246,13 @@ export default function SubscriptionsPage() {
 
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800 pt-4">
                 <div>
-                  <p className="text-xs text-zinc-500">Próximo Vencimento</p>
+                  <p className="text-xs text-zinc-500">{t("subscriptions.nextDue")}</p>
                   <p className="mt-1 text-sm font-medium text-zinc-200">
-                    {formatDate(subscription.nextDue)}
+                    {formatDate(subscription.nextDue, bcp47)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Pagamento</p>
+                  <p className="text-xs text-zinc-500">{t("subscriptions.payment")}</p>
                   <p className="mt-1 truncate text-sm font-medium text-zinc-200">
                     {paymentLabel[subscription.payment]}
                   </p>

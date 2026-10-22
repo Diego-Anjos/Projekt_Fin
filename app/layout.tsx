@@ -26,11 +26,42 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full bg-black antialiased`}
       suppressHydrationWarning
     >
+      {/*
+        Fundo global estilizado — NÃO há imagem em public/ (nunca houve
+        bg-stars.png etc.): o fundo original (commit bbce09d, "fundo
+        espacial") é a combinação de:
+          1. gradiente esverdeado do <body> (visível mesmo sem JS),
+          2. os 3 blobs emerald com blur abaixo,
+          3. o canvas de partículas/estrelas <AmbientBackground />.
+
+        Porque desapareceu (regressão das refatorações recentes):
+        os blobs e o canvas usam `-z-10`. Sem contexto de empilhamento
+        no <body>, eles pintam ANTES do fundo do body na ordem CSS —
+        enquanto o `background-color` do body era propagado para o
+        canvas da página, ficavam visíveis; quando globals.css passou
+        a pintar `background-color: #000` opaco em html+body (correção
+        das bordas brancas/overscroll), essa propagação acabou e o
+        preto opaco do body passou a pintar POR CIMA das partículas,
+        deixando só o fundo preto sólido.
+
+        Correção: `isolate` (isolation: isolate) no <body> cria o
+        contexto de empilhamento — aí a ordem é fundo do body →
+        filhos -z-10 (blobs/canvas) → conteúdo, e o fundo volta a
+        aparecer sem perder a base preta anti-overscroll do <html>.
+        Não remover o `isolate` nem trocar o -z-10 sem recolocar esta
+        garantia (também reforçada em globals.css, regra do body).
+
+        O scroll vertical vive dentro do AppShell (h-dvh +
+        overflow-y-auto), por isso o body não deve ter
+        `h-full overflow-hidden`, que cortava o canvas fora da área
+        inicial. As antigas classes `bg-cover bg-center bg-no-repeat
+        bg-fixed` eram mortas (sem nenhum bg-[url(...)]) e saíram.
+      */}
       <body
-        className="h-full overflow-hidden bg-black text-zinc-100"
+        className="isolate min-h-screen w-full overflow-x-hidden bg-black bg-gradient-to-br from-zinc-950 via-[#0a1a15] to-zinc-950 text-zinc-100"
         suppressHydrationWarning
       >
         <div className="pointer-events-none fixed top-[-10%] left-[-10%] -z-10 h-[50%] w-[50%] rounded-full bg-emerald-600/20 blur-[150px]" />

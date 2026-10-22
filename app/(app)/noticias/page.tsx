@@ -1,9 +1,12 @@
 "use client";
 
+import { useDynamicTranslations } from "@/hooks/use-dynamic-translation";
+import { useTranslation } from "@/hooks/use-translation";
 import { Newspaper, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type NewsCategory = "Geral" | "Cripto" | "Ações" | "Macroeconomia";
+/** Id estável da categoria — o rótulo visível vem de `t()`, nunca do id. */
+type NewsCategory = "geral" | "cripto" | "acoes" | "macro";
 
 type NewsArticle = {
   source?: { name?: string | null } | null;
@@ -14,12 +17,22 @@ type NewsArticle = {
   publishedAt?: string | null;
 };
 
-const filters: NewsCategory[] = ["Geral", "Cripto", "Ações", "Macroeconomia"];
+const filters: { id: NewsCategory; labelKey: string }[] = [
+  { id: "geral", labelKey: "news.categoryGeneral" },
+  { id: "cripto", labelKey: "news.categoryCrypto" },
+  { id: "acoes", labelKey: "news.categoryStocks" },
+  { id: "macro", labelKey: "news.categoryMacro" },
+];
 
-const filterQueries: Record<Exclude<NewsCategory, "Geral">, string> = {
-  Cripto: "cripto OR bitcoin OR ethereum",
-  Ações: "ações OR bolsa OR ibovespa",
-  Macroeconomia: "selic OR copom OR inflação OR pib",
+/**
+ * Termos de pesquisa enviados à API. Ficam em PT de propósito: a rota
+ * `/api/news` pesquisa domínios financeiros portugueses (`language=pt`),
+ * por isso traduzir a query quebraria os resultados.
+ */
+const filterQueries: Record<Exclude<NewsCategory, "geral">, string> = {
+  cripto: "cripto OR bitcoin OR ethereum",
+  acoes: "ações OR bolsa OR ibovespa",
+  macro: "selic OR copom OR inflação OR pib",
 };
 
 function isNewsArticle(value: unknown): value is NewsArticle {
@@ -35,24 +48,26 @@ function isNewsArticle(value: unknown): value is NewsArticle {
   );
 }
 
-function formatRelativeTime(isoDate: string) {
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function formatRelativeTime(isoDate: string, t: Translate) {
   const published = new Date(isoDate);
-  if (Number.isNaN(published.getTime())) return "Agora";
+  if (Number.isNaN(published.getTime())) return t("news.now");
 
   const minutes = Math.max(0, Math.round((Date.now() - published.getTime()) / 60000));
-  if (minutes < 1) return "Agora";
-  if (minutes < 60) return `Há ${minutes} min`;
+  if (minutes < 1) return t("news.now");
+  if (minutes < 60) return t("news.minutesAgo", { count: minutes });
 
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return hours === 1 ? "Há 1 hora" : `Há ${hours} horas`;
+  if (hours < 24) return hours === 1 ? t("news.oneHourAgo") : t("news.hoursAgo", { count: hours });
 
   const days = Math.round(hours / 24);
-  return days === 1 ? "Há 1 dia" : `Há ${days} dias`;
+  return days === 1 ? t("news.oneDayAgo") : t("news.daysAgo", { count: days });
 }
 
 function newsPath(activeFilter: NewsCategory, search: string) {
   const term = search.trim();
-  const q = term || (activeFilter === "Geral" ? "" : filterQueries[activeFilter]);
+  const q = term || (activeFilter === "geral" ? "" : filterQueries[activeFilter]);
   if (!q) return "/api/news";
   return `/api/news?q=${encodeURIComponent(q)}`;
 }
@@ -98,10 +113,68 @@ function ArticleCover({ src }: { src: string | null | undefined }) {
   );
 }
 
+/**
+ * Cartão de notícia — componente **apresentacional puro** (sem hooks de
+ * tradução). A página traduz todos os títulos/resumos de uma vez com
+ * `useDynamicTranslations` (1 pedido para a lista inteira) e passa os
+ * textos já resolvidos por props; enquanto o batch está em voo, o cartão
+ * mostra os originais com fade (`opacity-60` + transição), sem bloquear
+ * a renderização. A fonte (nome do jornal) não é traduzida — nome próprio.
+ */
+function NewsArticleCard({
+  article,
+  translatedTitle,
+  translatedDescription,
+  isTranslating,
+}: {
+  article: NewsArticle;
+  translatedTitle: string;
+  translatedDescription: string;
+  isTranslating: boolean;
+}) {
+  const { t } = useTranslation();
+  const url = article.url?.trim() ?? "";
+  const rawDescription = article.description?.trim() ?? "";
+  const source = article.source?.name?.trim() || t("news.unknownSource");
+  const publishedAt = article.publishedAt?.trim() || "";
+  const description = rawDescription ? translatedDescription : t("news.noDescription");
+  const fadeClassName = `transition-opacity duration-300 ${
+    isTranslating ? "opacity-60" : "opacity-100"
+  }`;
+
+  return (
+    <article className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black transition-colors duration-200 hover:border-emerald-500/50">
+      <ArticleCover src={article.urlToImage} />
+      <div className="flex flex-1 flex-col p-5">
+        <p className="text-sm text-zinc-400">
+          {source}
+          <span aria-hidden="true"> · </span>
+          <time dateTime={publishedAt || undefined}>{formatRelativeTime(publishedAt, t)}</time>
+        </p>
+        <h2 className={`mt-2 line-clamp-2 text-lg font-semibold text-zinc-100 ${fadeClassName}`}>
+          {translatedTitle}
+        </h2>
+        <p className={`mt-2 line-clamp-3 text-sm text-zinc-400 ${fadeClassName}`}>{description}</p>
+        <div className="mt-4 border-t border-zinc-800/50 pt-4">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-emerald-400 transition-colors duration-200 hover:text-emerald-300"
+          >
+            {t("news.readFullArticle")}
+          </a>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default function NoticiasPage() {
+  const { t } = useTranslation();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<NewsCategory>("Geral");
+  const [activeFilter, setActiveFilter] = useState<NewsCategory>("geral");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -128,7 +201,7 @@ export default function NoticiasPage() {
 
         if (!response.ok || !Array.isArray(data)) {
           setArticles([]);
-          setLoadError("Não foi possível carregar as notícias agora.");
+          setLoadError(t("news.loadError"));
           return;
         }
 
@@ -136,7 +209,7 @@ export default function NoticiasPage() {
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
         setArticles([]);
-        setLoadError("Não foi possível carregar as notícias agora.");
+        setLoadError(t("news.loadError"));
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
       }
@@ -145,22 +218,36 @@ export default function NoticiasPage() {
     void loadNews();
 
     return () => controller.abort();
-  }, [activeFilter, debouncedSearch]);
+  }, [activeFilter, debouncedSearch, t]);
 
-  const emptyMessage = loadError ?? "Nenhuma notícia encontrada para essa busca.";
+  // Batch único de tradução: todos os títulos + resumos da lista num só
+  // pedido (a página renderiza já com os originais; quando o batch chega,
+  // UM setState atualiza todos os cartões — sem hooks/fetch por cartão).
+  const translatableTexts = useMemo(
+    () =>
+      articles.flatMap((article) => [
+        article.title?.trim() ?? "",
+        article.description?.trim() ?? "",
+      ]),
+    [articles],
+  );
+  const { texts: translatedTexts, isTranslating: isTranslatingArticles } =
+    useDynamicTranslations(translatableTexts);
+
+  const emptyMessage = loadError ?? t("news.empty");
 
   return (
     <div className="flex w-full flex-col gap-4 md:gap-6">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-8 sm:px-10">
         <div className="mx-auto max-w-3xl text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-            Notícias do Mercado
+            {t("news.title")}
           </h1>
           <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-            As principais manchetes de economia e finanças em tempo real
+            {t("news.subtitle")}
           </p>
           <label className="relative mt-6 block">
-            <span className="sr-only">Pesquisar notícias</span>
+            <span className="sr-only">{t("news.searchNews")}</span>
             <Search
               className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-emerald-300/80"
               aria-hidden="true"
@@ -168,27 +255,27 @@ export default function NoticiasPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Pesquisar manchete, fonte ou tema..."
+              placeholder={t("news.searchPlaceholder")}
               className="h-12 w-full rounded-2xl border border-emerald-800/50 bg-[#041610] pr-4 pl-12 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
           </label>
           <div
             role="group"
-            aria-label="Filtrar notícias por tema"
+            aria-label={t("news.filterAria")}
             className="mt-4 flex flex-wrap items-center justify-center gap-2"
           >
             {filters.map((filter) => {
-              const isActive = filter === activeFilter;
+              const isActive = filter.id === activeFilter;
 
               return (
                 <button
-                  key={filter}
+                  key={filter.id}
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => {
                     setSearch("");
                     setDebouncedSearch("");
-                    setActiveFilter(filter);
+                    setActiveFilter(filter.id);
                   }}
                   className={
                     isActive
@@ -196,7 +283,7 @@ export default function NoticiasPage() {
                       : "rounded-full border border-zinc-700/80 bg-black/40 px-4 py-1.5 text-sm font-medium text-zinc-300 transition-colors duration-200 hover:border-emerald-500/50 hover:text-emerald-300"
                   }
                 >
-                  {filter}
+                  {t(filter.labelKey)}
                 </button>
               );
             })}
@@ -206,7 +293,7 @@ export default function NoticiasPage() {
 
       {isLoading ? (
         <section
-          aria-label="Carregando notícias"
+          aria-label={t("news.loadingAria")}
           aria-busy="true"
           className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
         >
@@ -219,42 +306,16 @@ export default function NoticiasPage() {
           {emptyMessage}
         </p>
       ) : (
-        <section aria-label="Manchetes" className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {articles.map((article) => {
-            const title = article.title?.trim() ?? "";
-            const url = article.url?.trim() ?? "";
-            const description = article.description?.trim() || "Sem resumo disponível.";
-            const source = article.source?.name?.trim() || "Fonte desconhecida";
-            const publishedAt = article.publishedAt?.trim() || "";
-
-            return (
-              <article
-                key={url}
-                className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black transition-colors duration-200 hover:border-emerald-500/50"
-              >
-                <ArticleCover src={article.urlToImage} />
-                <div className="flex flex-1 flex-col p-5">
-                  <p className="text-sm text-zinc-400">
-                    {source}
-                    <span aria-hidden="true"> · </span>
-                    <time dateTime={publishedAt || undefined}>{formatRelativeTime(publishedAt)}</time>
-                  </p>
-                  <h2 className="mt-2 line-clamp-2 text-lg font-semibold text-zinc-100">{title}</h2>
-                  <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{description}</p>
-                  <div className="mt-4 border-t border-zinc-800/50 pt-4">
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-emerald-400 transition-colors duration-200 hover:text-emerald-300"
-                    >
-                      Ler artigo completo -&gt;
-                    </a>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+        <section aria-label={t("news.headlinesAria")} className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {articles.map((article, index) => (
+            <NewsArticleCard
+              key={article.url?.trim()}
+              article={article}
+              translatedTitle={translatedTexts[index * 2] ?? article.title?.trim() ?? ""}
+              translatedDescription={translatedTexts[index * 2 + 1] ?? ""}
+              isTranslating={isTranslatingArticles}
+            />
+          ))}
         </section>
       )}
     </div>

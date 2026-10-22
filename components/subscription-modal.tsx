@@ -1,8 +1,10 @@
 "use client";
 
 import { useSession } from "@/components/require-session";
+import { AppSelect } from "@/components/ui/app-select";
 import { CustomDatePicker, parseCalendarDate, toCalendarIso } from "@/components/ui/custom-date-picker";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
 import { createSubscription, updateSubscription } from "@/lib/appwrite/database";
 import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -25,7 +27,7 @@ export type ServiceSubscription = {
 const fieldClassName =
   "h-12 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
-function collectValidationErrors(form: HTMLFormElement) {
+function collectValidationErrors(form: HTMLFormElement, invalidField: string) {
   const errors: Record<string, string> = {};
 
   for (const element of form.elements) {
@@ -38,7 +40,7 @@ function collectValidationErrors(form: HTMLFormElement) {
     }
 
     if (!element.name || element.disabled || element.validity.valid) continue;
-    errors[element.name] = element.validationMessage || "Campo inválido.";
+    errors[element.name] = element.validationMessage || invalidField;
   }
 
   return errors;
@@ -75,6 +77,7 @@ function SubscriptionModalForm({
   onSave,
 }: Omit<SubscriptionModalProps, "open">) {
   const { currency } = usePreferences();
+  const { t } = useTranslation();
   const [name, setName] = useState(subscription?.name ?? "");
   const [amount, setAmount] = useState(
     subscription ? formatCurrencyInput(Math.round(subscription.amount * 100), currency) : "",
@@ -123,19 +126,19 @@ function SubscriptionModalForm({
     event.preventDefault();
     console.log("--- SUBMIT DO FORMULÁRIO ---");
 
-    const errors = collectValidationErrors(event.currentTarget);
+    const errors = collectValidationErrors(event.currentTarget, t("subscriptions.invalidField"));
     const parsedAmount = parseCurrencyToNumber(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = "Informe um valor maior que zero.";
+      errors.amount = t("subscriptions.amountError");
     }
 
     if (!subscribedAt) {
-      errors.subscribedAt = "Informe a data da inscrição.";
+      errors.subscribedAt = t("subscriptions.subscribedAtError");
     }
 
     if (!nextDue) {
-      errors.nextDue = "Informe a data de vencimento.";
+      errors.nextDue = t("subscriptions.nextDueError");
     }
 
     if (Object.keys(errors).length > 0 || !subscribedAt || !nextDue) {
@@ -163,7 +166,7 @@ function SubscriptionModalForm({
 
       if (!user || !user.$id) {
         console.error("❌ ERRO: O utilizador não está logado no momento do clique!");
-        setSubmitError("Sessão em falta. Entre novamente e tente salvar.");
+        setSubmitError(t("subscriptions.sessionMissing"));
         return;
       }
 
@@ -185,7 +188,7 @@ function SubscriptionModalForm({
       onClose();
     } catch (error) {
       console.error("❌ C. ERRO CAPTURADO NO MODAL:", error);
-      const message = error instanceof Error ? error.message : "Falha ao salvar a assinatura.";
+      const message = error instanceof Error ? error.message : t("subscriptions.saveError");
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
@@ -209,17 +212,19 @@ function SubscriptionModalForm({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Fechar"
+          aria-label={t("subscriptions.close")}
           className="absolute top-4 right-4 rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-zinc-100"
         >
           <X className="size-5" aria-hidden="true" />
         </button>
 
         <h2 id="subscription-modal-title" className="pr-10 text-xl font-semibold text-zinc-50">
-          {subscription ? "Editar Assinatura" : "Nova Assinatura"}
+          {subscription ? t("subscriptions.modalEditTitle") : t("subscriptions.modalNewTitle")}
         </h2>
         <p className="mt-1 mb-6 text-sm text-zinc-400">
-          {subscription ? "Atualize os dados deste serviço recorrente" : "Cadastre um serviço recorrente"}
+          {subscription
+            ? t("subscriptions.modalEditSubtitle")
+            : t("subscriptions.modalNewSubtitle")}
         </p>
 
         <form
@@ -229,7 +234,7 @@ function SubscriptionModalForm({
           className="grid grid-cols-1 gap-6 md:grid-cols-2"
         >
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Nome do Serviço</span>
+            <span className="text-sm font-medium text-zinc-300">{t("subscriptions.serviceName")}</span>
             <input
               type="text"
               name="name"
@@ -243,7 +248,7 @@ function SubscriptionModalForm({
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              Valor ({getCurrencySymbol(currency)})
+              {t("subscriptions.amount", { symbol: getCurrencySymbol(currency) })}
             </span>
             <span className="relative block">
               <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-medium text-emerald-400 select-none">
@@ -271,22 +276,25 @@ function SubscriptionModalForm({
             {amountError ? <span className="text-sm text-red-400">{amountError}</span> : null}
           </label>
 
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Ciclo de Cobrança</span>
-            <select
+          <div className="flex flex-col gap-2">
+            <span id="subscription-cycle-label" className="text-sm font-medium text-zinc-300">
+              {t("subscriptions.cycle")}
+            </span>
+            <AppSelect
               name="cycle"
               value={cycle}
-              onChange={(event) => setCycle(event.target.value as BillingCycle)}
-              required
-              className={`${fieldClassName} [color-scheme:dark]`}
-            >
-              <option value="monthly">Mensal</option>
-              <option value="yearly">Anual</option>
-            </select>
-          </label>
+              onChange={(next) => setCycle(next as BillingCycle)}
+              ariaLabelledBy="subscription-cycle-label"
+              options={[
+                { value: "monthly", label: t("subscriptions.cycleMonthly") },
+                { value: "yearly", label: t("subscriptions.cycleYearly") },
+              ]}
+              buttonClassName="flex h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-left text-sm text-zinc-100 outline-none transition-colors duration-200 hover:border-zinc-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
 
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Data da Inscrição</span>
+            <span className="text-sm font-medium text-zinc-300">{t("subscriptions.subscribedAt")}</span>
             <CustomDatePicker
               name="subscribedAt"
               selected={subscribedAt}
@@ -297,7 +305,7 @@ function SubscriptionModalForm({
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">
-              {subscription ? "Próximo Vencimento" : "Primeiro Vencimento"}
+              {subscription ? t("subscriptions.nextDue") : t("subscriptions.firstDue")}
             </span>
             <CustomDatePicker
               name="nextDue"
@@ -307,20 +315,23 @@ function SubscriptionModalForm({
             />
           </label>
 
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">Forma de Pagamento</span>
-            <select
+          <div className="flex flex-col gap-2">
+            <span id="subscription-payment-label" className="text-sm font-medium text-zinc-300">
+              {t("subscriptions.paymentMethod")}
+            </span>
+            <AppSelect
               name="payment"
               value={payment}
-              onChange={(event) => setPayment(event.target.value as PaymentMethod)}
-              required
-              className={`${fieldClassName} [color-scheme:dark]`}
-            >
-              <option value="credit">Cartão de Crédito</option>
-              <option value="pix">PIX</option>
-              <option value="boleto">Boleto</option>
-            </select>
-          </label>
+              onChange={(next) => setPayment(next as PaymentMethod)}
+              ariaLabelledBy="subscription-payment-label"
+              options={[
+                { value: "credit", label: t("subscriptions.paymentCredit") },
+                { value: "pix", label: t("subscriptions.paymentPix") },
+                { value: "boleto", label: t("subscriptions.paymentBoleto") },
+              ]}
+              buttonClassName="flex h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-left text-sm text-zinc-100 outline-none transition-colors duration-200 hover:border-zinc-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
 
           {submitError ? (
             <p className="col-span-1 text-sm text-red-400 md:col-span-2" role="alert">
@@ -335,7 +346,7 @@ function SubscriptionModalForm({
               disabled={isSubmitting}
               className="h-12 rounded-xl border border-zinc-800 px-5 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:bg-zinc-900 disabled:opacity-60"
             >
-              Cancelar
+              {t("subscriptions.cancel")}
             </button>
             <button
               type="submit"
@@ -344,7 +355,11 @@ function SubscriptionModalForm({
               disabled={isSubmitting}
               className="h-12 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60"
             >
-              {isSubmitting ? "A guardar..." : subscription ? "Salvar alterações" : "Salvar Assinatura"}
+              {isSubmitting
+                ? t("subscriptions.saving")
+                : subscription
+                  ? t("subscriptions.saveChanges")
+                  : t("subscriptions.save")}
             </button>
           </div>
         </form>

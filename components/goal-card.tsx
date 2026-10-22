@@ -1,6 +1,9 @@
 "use client";
 
 import { usePreferences } from "@/contexts/preferences-context";
+import { useDynamicTranslationState } from "@/hooks/use-dynamic-translation";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import {
   Car,
@@ -29,31 +32,33 @@ const CATEGORY_ICONS: Record<GoalCategory, LucideIcon> = {
   other: Target,
 };
 
-const CATEGORY_LABELS: Record<GoalCategory, string> = {
-  travel: "Viagem",
-  emergency: "Emergência",
-  tech: "Tech / Setup",
-  home: "Casa",
-  education: "Educação",
-  car: "Veículo",
-  other: "Outro",
+const CATEGORY_LABEL_KEYS: Record<GoalCategory, string> = {
+  travel: "goals.categoryTravel",
+  emergency: "goals.categoryEmergency",
+  tech: "goals.categoryTech",
+  home: "goals.categoryHome",
+  education: "goals.categoryEducation",
+  car: "goals.categoryCar",
+  other: "goals.categoryOther",
 };
 
-function formatTargetDate(isoDate: string) {
+function formatTargetDate(isoDate: string, bcp47: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
   if (!match) return isoDate;
 
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  return new Intl.DateTimeFormat("pt-BR", {
+  return new Intl.DateTimeFormat(bcp47, {
     day: "2-digit",
     month: "short",
     year: "numeric",
   }).format(new Date(year, month - 1, day));
 }
 
-function getRemainingLabel(isoDate: string) {
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function getRemainingLabel(isoDate: string, t: Translate) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
   if (!match) return null;
 
@@ -64,14 +69,14 @@ function getRemainingLabel(isoDate: string) {
 
   const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return "Prazo ultrapassado";
-  if (diffDays === 0) return "Vence hoje";
-  if (diffDays === 1) return "1 dia restante";
-  if (diffDays < 30) return `${diffDays} dias restantes`;
+  if (diffDays < 0) return t("goals.overdue");
+  if (diffDays === 0) return t("goals.dueToday");
+  if (diffDays === 1) return t("goals.oneDay");
+  if (diffDays < 30) return t("goals.days", { count: diffDays });
 
   const months = Math.round(diffDays / 30);
-  if (months === 1) return "≈ 1 mês restante";
-  return `≈ ${months} meses restantes`;
+  if (months === 1) return t("goals.oneMonth");
+  return t("goals.months", { count: months });
 }
 
 type GoalCardProps = {
@@ -84,12 +89,28 @@ type GoalCardProps = {
 
 export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCardProps) {
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
+  // Conteúdo dinâmico (Appwrite): traduzido para o idioma ativo via
+  // /api/translate com cache; em `pt` (origem) ou enquanto carrega,
+  // mostra o original. Os hooks são incondicionais — strings vazias/
+  // ausentes são ignoradas por dentro.
+  const titleState = useDynamicTranslationState(goal.title);
+  const descState = useDynamicTranslationState(goal.description);
+  const translatedTitle = titleState.text;
+  const translatedDesc = descState.text;
+  // Fade suave enquanto a tradução está em voo (nunca bloqueia o cartão).
+  const titleFadeClassName = `transition-opacity duration-300 ${
+    titleState.isTranslating ? "opacity-60" : "opacity-100"
+  }`;
+  const descFadeClassName = `transition-opacity duration-300 ${
+    descState.isTranslating ? "opacity-60" : "opacity-100"
+  }`;
   const Icon = CATEGORY_ICONS[goal.category];
   const progress = goal.targetAmount > 0
     ? Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100))
     : 0;
   const isCompleted = goal.isCompleted;
-  const remaining = getRemainingLabel(goal.targetDate);
+  const remaining = getRemainingLabel(goal.targetDate, t);
 
   return (
     <article
@@ -111,8 +132,8 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
             <Icon className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-zinc-50">{goal.title}</h3>
-            <p className="text-xs text-zinc-500">{CATEGORY_LABELS[goal.category]}</p>
+            <h3 className={`truncate text-base font-semibold text-zinc-50 ${titleFadeClassName}`}>{translatedTitle}</h3>
+            <p className="text-xs text-zinc-500">{t(CATEGORY_LABEL_KEYS[goal.category])}</p>
           </div>
         </div>
 
@@ -121,7 +142,7 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={goal.imageUrl}
-              alt={goal.title}
+              alt={translatedTitle}
               className={`h-full w-full rounded-xl border object-cover shadow-md ${
                 isCompleted ? "border-amber-500/20" : "border-zinc-800"
               }`}
@@ -150,8 +171,8 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
                   type="button"
                   onClick={() => onEdit(goal)}
                   disabled={isDeleting}
-                  aria-label={`Editar meta ${goal.title}`}
-                  title="Editar meta"
+                  aria-label={t("goals.editGoalAria", { title: translatedTitle })}
+                  title={t("goals.editGoal")}
                   className="flex size-7 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-emerald-400 disabled:opacity-50"
                 >
                   <Pencil className="size-4" aria-hidden="true" />
@@ -162,8 +183,8 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
                   type="button"
                   onClick={() => onDelete(goal)}
                   disabled={isDeleting}
-                  aria-label={`Excluir meta ${goal.title}`}
-                  title="Excluir meta"
+                  aria-label={t("goals.deleteGoalAria", { title: translatedTitle })}
+                  title={t("goals.deleteGoal")}
                   className="flex size-7 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-red-400 disabled:opacity-50"
                 >
                   {isDeleting ? (
@@ -188,6 +209,10 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
         </div>
       </div>
 
+      {goal.description ? (
+        <p className={`mt-2 line-clamp-2 text-sm text-zinc-400 ${descFadeClassName}`}>{translatedDesc}</p>
+      ) : null}
+
       <div className="mt-5">
         <p className="text-sm text-zinc-300">
           <span
@@ -197,7 +222,7 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
           >
             {formatCurrency(goal.currentAmount, currency, privacyMode)}
           </span>
-          <span className="text-zinc-500"> de </span>
+          <span className="text-zinc-500"> {t("goals.of")} </span>
           <span className="text-zinc-200">
             {formatCurrency(goal.targetAmount, currency, privacyMode)}
           </span>
@@ -209,7 +234,7 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
           aria-valuenow={progress}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Progresso de ${goal.title}: ${progress}%`}
+          aria-label={t("goals.progressAria", { title: translatedTitle, progress })}
         >
           <div
             className={`h-full rounded-full transition-all duration-500 ${
@@ -226,11 +251,11 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
         {isCompleted ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 font-medium text-emerald-400">
             <CheckCircle2 className="size-3.5" aria-hidden="true" />
-            Concluído
+            {t("goals.completedLabel")}
           </span>
         ) : (
           <>
-            <span>Meta: {formatTargetDate(goal.targetDate)}</span>
+            <span>{t("goals.target", { date: formatTargetDate(goal.targetDate, localeToBcp47[locale]) })}</span>
             {remaining ? <span className="text-emerald-400/80">{remaining}</span> : null}
           </>
         )}

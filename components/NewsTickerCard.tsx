@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/hooks/use-translation";
 import { fetchFinancialNews, type FinancialNews } from "@/services/newsApi";
 import { Newspaper } from "lucide-react";
 import Link from "next/link";
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react";
 const HEADLINE_LIMIT = 10;
 
 export function NewsTickerCard() {
+  const { t } = useTranslation();
   const [news, setNews] = useState<FinancialNews[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -54,7 +56,7 @@ export function NewsTickerCard() {
           {headline.title}
         </p>
       ) : (
-        <p className="text-sm font-medium text-zinc-400">A carregar...</p>
+        <p className="text-sm font-medium text-zinc-400">{t("common.loading")}</p>
       )}
     </>
   );

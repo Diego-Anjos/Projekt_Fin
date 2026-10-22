@@ -33,6 +33,8 @@ export const appwriteConfig = {
   transactionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID || "",
   subscriptionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID || "",
   goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID || "",
+  chatSessionsCollectionId:
+    process.env.NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID || "",
   categoriesCollectionId: appwriteCategoriesCollectionId || "",
   avatarsBucketId: process.env.NEXT_PUBLIC_APPWRITE_AVATARS_BUCKET_ID || "",
   goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID || "",

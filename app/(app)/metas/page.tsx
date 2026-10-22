@@ -10,6 +10,7 @@ import {
   getGoals,
   type GoalDocument,
 } from "@/lib/appwrite/goals";
+import { useTranslation } from "@/hooks/use-translation";
 import { Plus, Target, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ function toFinancialGoal(document: GoalDocument): FinancialGoal {
   return {
     id: document.$id,
     title: document.title,
+    description: document.description?.trim() ? document.description : undefined,
     targetAmount: Number(document.targetAmount),
     currentAmount: Number(document.currentAmount),
     targetDate: document.targetDate,
@@ -52,6 +54,7 @@ function toFinancialGoal(document: GoalDocument): FinancialGoal {
 
 export default function MetasPage() {
   const { user } = useSession();
+  const { t } = useTranslation();
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,9 +86,9 @@ export default function MetasPage() {
       setGoals(response.documents.map(toFinancialGoal));
     } catch (error) {
       console.error("Falha ao carregar metas.", error);
-      toast.error("Falha ao carregar as metas. Tente novamente.");
+      toast.error(t("goals.loadError"));
     }
-  }, [user.$id, currentPage]);
+  }, [user.$id, currentPage, t]);
 
   useEffect(() => {
     let active = true;
@@ -113,7 +116,7 @@ export default function MetasPage() {
         if (active) {
           setGoals([]);
           setTotalItems(0);
-          toast.error("Falha ao carregar as metas. Tente novamente.");
+          toast.error(t("goals.loadError"));
         }
       } finally {
         if (active) setLoading(false);
@@ -125,7 +128,7 @@ export default function MetasPage() {
     return () => {
       active = false;
     };
-  }, [user.$id, currentPage, refreshKey]);
+  }, [user.$id, currentPage, refreshKey, t]);
 
   function openCreateModal() {
     setGoalToEdit(null);
@@ -157,23 +160,19 @@ export default function MetasPage() {
   async function handleDeleteGoal(goal: FinancialGoal) {
     if (deletingGoalId) return;
 
-    const confirmed = window.confirm("Tem a certeza que deseja excluir esta meta?");
+    const confirmed = window.confirm(t("goals.deleteConfirm"));
     if (!confirmed) return;
 
     setDeletingGoalId(goal.id);
     try {
       await deleteGoal(goal.id, goal.imageId);
       setGoals((current) => current.filter((item) => item.id !== goal.id));
-      toast.success("Meta excluída com sucesso!");
+      toast.success(t("goals.deleted"));
       // Refetch para reconciliar a lista com o servidor.
       await refetchGoals();
     } catch (error) {
       console.error("Falha ao excluir meta:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Falha ao excluir a meta. Tente novamente.",
-      );
+      toast.error(error instanceof Error ? error.message : t("goals.deleteError"));
     } finally {
       setDeletingGoalId(null);
     }
@@ -188,10 +187,10 @@ export default function MetasPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-3xl">
-              Minhas Metas
+              {t("goals.title")}
             </h1>
             <p className="mt-2 text-sm text-emerald-100/70 sm:text-base">
-              Acompanhe os seus objetivos financeiros
+              {t("goals.subtitle")}
             </p>
           </div>
         </div>
@@ -201,36 +200,33 @@ export default function MetasPage() {
           className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Nova Meta
+          {t("goals.new")}
         </button>
       </header>
 
       {loading ? (
-        <p className="w-full py-12 text-center text-zinc-400">A carregar metas...</p>
+        <p className="w-full py-12 text-center text-zinc-400">{t("goals.loading")}</p>
       ) : goals.length === 0 ? (
         <div className="flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-800/50 bg-black/40 px-6 py-16 text-center backdrop-blur-sm">
           <div className="mb-5 flex size-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
             <Target className="size-8" aria-hidden="true" />
           </div>
-          <h2 className="text-lg font-semibold text-zinc-100">Nenhuma meta definida</h2>
-          <p className="mt-2 max-w-md text-sm text-zinc-400">
-            Comece a mapear os seus objetivos — férias, reserva de emergência ou aquele upgrade
-            que está na wishlist.
-          </p>
+          <h2 className="text-lg font-semibold text-zinc-100">{t("goals.emptyTitle")}</h2>
+          <p className="mt-2 max-w-md text-sm text-zinc-400">{t("goals.emptyText")}</p>
           <button
             type="button"
             onClick={openCreateModal}
             className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
           >
             <Plus className="size-4" aria-hidden="true" />
-            Criar primeira meta
+            {t("goals.createFirst")}
           </button>
         </div>
       ) : (
         <>
           {activeGoals.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-800 bg-black/30 px-6 py-10 text-center text-sm text-zinc-400">
-              Todas as metas ativas foram alcançadas. Crie uma nova para continuar.
+              {t("goals.allCompleted")}
             </div>
           ) : (
             <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
@@ -254,7 +250,7 @@ export default function MetasPage() {
                 className="mt-8 mb-6 flex items-center gap-2 text-xl font-bold text-white md:mt-12"
               >
                 <Trophy className="h-5 w-5 text-emerald-500" aria-hidden="true" />
-                Metas Alcançadas
+                {t("goals.completed")}
               </h2>
               <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
                 {completedGoals.map((goal) => (

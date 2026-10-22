@@ -9,6 +9,8 @@ import { useSession } from "@/components/require-session";
 import { RecentTransactions } from "@/components/recent-transactions";
 import { RecurringSubscriptions } from "@/components/recurring-subscriptions";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import {
   getSubscriptions,
@@ -18,23 +20,23 @@ import {
 } from "@/lib/appwrite/database";
 import type { DashboardKpis, Subscription, Transaction } from "@/types/dashboard";
 
-function formatDashboardDate(value: string) {
+function formatDashboardDate(value: string, bcp47: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   const date = match
     ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
     : new Date(value);
   const day = String(date.getDate()).padStart(2, "0");
-  const month = new Intl.DateTimeFormat("pt-BR", { month: "short" })
+  const month = new Intl.DateTimeFormat(bcp47, { month: "short" })
     .format(date)
     .replace(".", "");
 
   return `${day} ${month.charAt(0).toUpperCase()}${month.slice(1)}`;
 }
 
-function toDashboardTransaction(document: TransactionDocument): Transaction {
+function toDashboardTransaction(document: TransactionDocument, bcp47: string): Transaction {
   return {
     id: document.$id,
-    date: formatDashboardDate(document.date),
+    date: formatDashboardDate(document.date, bcp47),
     description: document.description,
     category: document.category,
     amount: document.amount,
@@ -42,13 +44,17 @@ function toDashboardTransaction(document: TransactionDocument): Transaction {
   };
 }
 
-function toDashboardSubscription(document: SubscriptionDocument): Subscription {
+function toDashboardSubscription(
+  document: SubscriptionDocument,
+  bcp47: string,
+  renewsLabel: (date: string) => string,
+): Subscription {
   return {
     id: document.$id,
     name: document.name,
-    date: formatDashboardDate(document.subscribedAt),
+    date: formatDashboardDate(document.subscribedAt, bcp47),
     amount: document.amount,
-    renewalDate: `Renova ${formatDashboardDate(document.nextDue)}`,
+    renewalDate: renewsLabel(formatDashboardDate(document.nextDue, bcp47)),
   };
 }
 
@@ -81,6 +87,8 @@ function computeCashKpis(documents: TransactionDocument[]) {
 export default function Home() {
   const { user } = useSession();
   const { currency, privacyMode } = usePreferences();
+  const { t, locale } = useTranslation();
+  const bcp47 = localeToBcp47[locale];
   const [kpis, setKpis] = useState<DashboardKpis>({
     totalWealth: 0,
     wealthGrowth: "0%",
@@ -103,8 +111,16 @@ export default function Home() {
 
         if (!active) return;
 
-        setTransactions(transactionsResponse.documents.slice(0, 10).map(toDashboardTransaction));
-        setSubscriptions(subscriptionsResponse.documents.map(toDashboardSubscription));
+        setTransactions(
+          transactionsResponse.documents
+            .slice(0, 10)
+            .map((document) => toDashboardTransaction(document, bcp47)),
+        );
+        setSubscriptions(
+          subscriptionsResponse.documents.map((document) =>
+            toDashboardSubscription(document, bcp47, (date) => t("dashboard.renews", { date })),
+          ),
+        );
         setKpis((current) => ({
           ...current,
           ...computeCashKpis(transactionsResponse.documents),
@@ -119,7 +135,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, bcp47, t]);
 
   const formatMoney = (value: number) => formatCurrency(value, currency, privacyMode);
 
@@ -133,7 +149,7 @@ export default function Home() {
 
       <section aria-labelledby="portfolio-kpis-heading" className="flex flex-col gap-4">
         <h2 id="portfolio-kpis-heading" className="text-base font-semibold text-zinc-100">
-          Portfolio KPIs
+          {t("dashboard.portfolioKpis")}
         </h2>
         <PortfolioKPIs kpis={kpis} formatCurrency={formatMoney} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">

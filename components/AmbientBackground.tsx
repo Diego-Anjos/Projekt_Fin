@@ -135,7 +135,7 @@ export function AmbientBackground({ contained = false }: { contained?: boolean }
       className={
         contained
           ? "pointer-events-none absolute inset-0 h-full w-full"
-          : "pointer-events-none fixed inset-0 -z-10 h-full w-full"
+          : "pointer-events-none fixed inset-0 -z-10 h-dvh w-screen"
       }
     />
   );

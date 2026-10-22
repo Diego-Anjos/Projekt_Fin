@@ -8,6 +8,59 @@
 
 html {
   color-scheme: dark;
+  /* Fundo base opaco: sem isto o browser pinta branco no overscroll
+     (topo/rodapé) e em qualquer faixa fora do conteúdo. */
+  background-color: #000;
+}
+
+html,
+body {
+  min-height: 100%;
+  background-color: #000;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+/*
+ * Fundo estilizado (blobs + canvas de partículas em app/layout.tsx):
+ * esses elementos usam `-z-10`, por isso o body PRECISA de ser um
+ * contexto de empilhamento — sem `isolation: isolate`, o
+ * `background-color: #000` opaco acima pinta por cima deles e a app
+ * fica com fundo preto sólido (foi essa a regressão). Com isolation,
+ * a ordem de pintura é: fundo do body → -z-10 → conteúdo.
+ * Não remover sem dar outra casa aos -z-10.
+ */
+body {
+  isolation: isolate;
+}
+
+/*
+ * Rede de segurança para qualquer <select> nativo remanescente/futuro:
+ * sem fundo azul do browser em hover/focus/active. O Firefox respeita
+ * estas regras de <option>; o Chromium/Windows ignora-as na lista
+ * aberta — por isso os filtros da app usam o componente `AppSelect`
+ * (listbox própria, ver components/ui/app-select.tsx).
+ */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: #18181b; /* zinc-900 */
+  color: #e4e4e7; /* zinc-200 */
+}
+
+select option:checked {
+  background-color: #27272a; /* zinc-800 */
+  color: #34d399; /* emerald-400 */
+}
+
+select option:hover,
+select option:focus,
+select option:active {
+  background-color: #27272a; /* zinc-800 */
+  color: #f4f4f5; /* zinc-100 */
 }
 
 body {

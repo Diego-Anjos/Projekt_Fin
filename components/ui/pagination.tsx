@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/hooks/use-translation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const buttonClassName =
@@ -16,28 +17,32 @@ export function Pagination({
   itemsPerPage: number;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useTranslation();
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   return (
     <nav
-      aria-label="Paginação"
+      aria-label={t("common.pagination")}
       className="flex flex-wrap items-center justify-between gap-3"
     >
       <button
         type="button"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        aria-label="Página anterior"
+        aria-label={t("common.previous")}
         className={buttonClassName}
       >
         <ChevronLeft className="size-4" aria-hidden="true" />
-        Anterior
+        {t("common.previous")}
       </button>
 
       <span aria-live="polite" className="text-sm text-zinc-400">
-        Página {currentPage} de {totalPages || 1}
+        {t("common.pageOf", { current: currentPage, total: totalPages || 1 })}
         {totalItems > 0 ? (
-          <span className="text-zinc-500"> · {totalItems} {totalItems === 1 ? "item" : "itens"}</span>
+          <span className="text-zinc-500">
+            {" "}
+            · {totalItems} {totalItems === 1 ? t("common.item") : t("common.items")}
+          </span>
         ) : null}
       </span>
 
@@ -45,10 +50,10 @@ export function Pagination({
         type="button"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages || totalItems === 0}
-        aria-label="Próxima página"
+        aria-label={t("common.next")}
         className={buttonClassName}
       >
-        Próximo
+        {t("common.next")}
         <ChevronRight className="size-4" aria-hidden="true" />
       </button>
     </nav>

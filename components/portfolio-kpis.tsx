@@ -1,6 +1,7 @@
 "use client";
 
 import { usePreferences } from "@/contexts/preferences-context";
+import { useTranslation } from "@/hooks/use-translation";
 import type { DashboardKpis } from "@/types/dashboard";
 
 function valueTone(value: number) {
@@ -23,11 +24,12 @@ export function PortfolioKPIs({
   formatCurrency: (value: number) => string;
 }) {
   const { privacyMode } = usePreferences();
+  const { t } = useTranslation();
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
-        <p className="text-xs font-medium text-zinc-400">Total Wealth</p>
+        <p className="text-xs font-medium text-zinc-400">{t("dashboard.totalWealth")}</p>
         <div className="mt-4 flex items-end justify-between gap-3">
           <p className="min-w-0 text-xl font-semibold tracking-tight break-words text-zinc-100 sm:text-2xl">
             {formatCurrency(kpis.totalWealth)}
@@ -43,7 +45,7 @@ export function PortfolioKPIs({
       </article>
 
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
-        <p className="text-xs font-medium text-zinc-400">Monthly Cash Flow</p>
+        <p className="text-xs font-medium text-zinc-400">{t("dashboard.monthlyCashFlow")}</p>
         <p
           className={`mt-4 min-w-0 text-2xl font-semibold tracking-tight break-words sm:text-3xl ${
             privacyMode ? "text-zinc-100" : valueTone(kpis.monthlyCashFlow)
@@ -55,7 +57,7 @@ export function PortfolioKPIs({
       </article>
 
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
-        <p className="text-xs font-medium text-zinc-400">Gastos do Mês Atual</p>
+        <p className="text-xs font-medium text-zinc-400">{t("dashboard.currentMonthExpenses")}</p>
         <p
           className={`mt-4 min-w-0 text-2xl font-semibold tracking-tight break-words sm:text-3xl ${
             privacyMode ? "text-zinc-100" : "text-red-500"

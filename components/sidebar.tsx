@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Bell,
   CandlestickChart,
   ChartColumn,
   Layers,
@@ -16,8 +15,9 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NotificationBell } from "@/components/notification-bell";
 import { useSession } from "@/components/require-session";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/hooks/use-translation";
 
 const navItems: { labelKey: string; href: string; icon: LucideIcon }[] = [
   { labelKey: "sidebar.marketHub", href: "/dashboard", icon: LayoutGrid },
@@ -49,7 +49,7 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const { t } = useLanguage();
+  const { t } = useTranslation();
   const { user } = useSession();
   const displayName = user.name.trim() || user.email;
   const initials = getInitials(user.name, user.email);
@@ -57,7 +57,7 @@ export function Sidebar({
 
   return (
     <aside
-      aria-label="Barra lateral"
+      aria-label={t("sidebar.sidebar")}
       className={`flex h-full w-[260px] shrink-0 flex-col border-r border-zinc-800 bg-[#041610] max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:transition-transform max-md:duration-300 ${
         open ? "max-md:translate-x-0" : "max-md:-translate-x-full"
       }`}
@@ -90,18 +90,12 @@ export function Sidebar({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-zinc-100">{displayName}</p>
-          <p className="text-xs text-zinc-400">Active</p>
+          <p className="text-xs text-zinc-400">{t("sidebar.active")}</p>
         </div>
-        <button
-          type="button"
-          aria-label="Notificações"
-          className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Bell className="size-4" aria-hidden="true" />
-        </button>
+        <NotificationBell />
       </div>
 
-      <nav aria-label="Menu principal" className="min-h-0 flex-1 overflow-y-auto px-3">
+      <nav aria-label={t("sidebar.mainMenu")} className="min-h-0 flex-1 overflow-y-auto px-3">
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
             const isCurrent = pathname === item.href;
@@ -130,11 +124,9 @@ export function Sidebar({
       <div className="m-4 rounded-xl border border-[#113829] bg-[#0a241a] p-4">
         <div className="mb-2 flex items-center gap-2">
           <Lightbulb className="size-4 text-emerald-500" aria-hidden="true" />
-          <p className="text-sm font-semibold text-zinc-100">Daily Tip:</p>
+          <p className="text-sm font-semibold text-zinc-100">{t("sidebar.dailyTip")}</p>
         </div>
-        <p className="text-sm leading-5 text-zinc-400">
-          Consolidate your subscriptions to save money this month.
-        </p>
+        <p className="text-sm leading-5 text-zinc-400">{t("sidebar.dailyTipText")}</p>
       </div>
     </aside>
   );
