@@ -33,8 +33,20 @@ export const appwriteConfig = {
   transactionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_TRANSACTIONS_COLLECTION_ID || "",
   subscriptionsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_SUBSCRIPTIONS_COLLECTION_ID || "",
   goalsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID || "",
+  /**
+   * ID real da collection de histórico de chat (Appwrite Console → Collection ID).
+   * Preferir NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID; a env antiga ainda é aceite.
+   * Sem fallback hardcoded — o ID gerado na consola não é "chatsessions".
+   */
+  chatCollectionId:
+    process.env.NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID ||
+    process.env.NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID ||
+    "",
+  /** @deprecated Use `chatCollectionId`. */
   chatSessionsCollectionId:
-    process.env.NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID || "",
+    process.env.NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID ||
+    process.env.NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID ||
+    "",
   categoriesCollectionId: appwriteCategoriesCollectionId || "",
   avatarsBucketId: process.env.NEXT_PUBLIC_APPWRITE_AVATARS_BUCKET_ID || "",
   goalsBucketId: process.env.NEXT_PUBLIC_APPWRITE_GOALS_BUCKET_ID || "",

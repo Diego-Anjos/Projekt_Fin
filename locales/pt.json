@@ -13,14 +13,16 @@
     "mainMenu": "Menu principal",
     "active": "Ativo",
     "dailyTip": "Dica do dia:",
-    "dailyTipText": "Consolide as suas assinaturas para poupar dinheiro este mês."
+    "dailyTipText": "Consolide as suas assinaturas para poupar dinheiro este mês.",
+    "dailyTipLoading": "A analisar os seus dados..."
   },
   "header": {
     "search": "Pesquisar...",
     "header": "Cabeçalho",
     "openMenu": "Abrir menu",
     "showBalances": "Mostrar saldos",
-    "hideBalances": "Ocultar saldos"
+    "hideBalances": "Ocultar saldos",
+    "selectLanguage": "Selecionar idioma"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -366,6 +368,20 @@
     "income": "Entrada / Receita",
     "expense": "Saída / Despesa",
     "amount": "Valor ({symbol})",
+    "amountTotal": "Valor total ({symbol})",
+    "amountInstallment": "Valor da parcela ({symbol})",
+    "amountHint": "Valor único desta transação.",
+    "amountTotalHint": "Insira o valor total. Ele será dividido pelo número de parcelas.",
+    "amountInstallmentHint": "Valor só desta parcela. As outras parcelas do grupo não são alteradas.",
+    "installmentToggle": "Compra parcelada?",
+    "installmentCount": "Quantidade de parcelas",
+    "installmentCountHint": "Mínimo 2. A primeira parcela usa a data e o status escolhidos; as seguintes ficam pendentes, uma em cada mês.",
+    "installmentCountError": "Informe entre 2 e 60 parcelas.",
+    "installmentAmountError": "O valor total é baixo demais para esse número de parcelas.",
+    "installmentPreview": "Cada parcela: {amount}. {count} lançamentos, um por mês.",
+    "installmentPreviewAdjusted": "Parcelas de {amount} e a última de {last}, para a soma fechar o total. {count} lançamentos, um por mês.",
+    "installmentEditNote": "Parcela {current} de {total}. Para antecipar, mude o status para Pago e a data para hoje. Só este lançamento é atualizado.",
+    "installmentsCreated": "{count} parcelas salvas com sucesso!",
     "date": "Data da Transação",
     "description": "Descrição",
     "descriptionPlaceholder": "Mercado da semana",

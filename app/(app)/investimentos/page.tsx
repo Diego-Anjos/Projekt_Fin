@@ -184,7 +184,7 @@ export default function InvestimentosPage() {
       <div
         role="tablist"
         aria-label={t("investments.categoriesAria")}
-        className="mt-6 flex gap-1 overflow-x-auto border-b border-zinc-800"
+        className="mt-6 flex gap-1 overflow-x-auto whitespace-nowrap scrollbar-hide border-b border-zinc-800 pb-2"
       >
         {tabs.map((item) => {
           const isActive = item.id === activeTab;

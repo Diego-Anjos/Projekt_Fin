@@ -27,7 +27,7 @@ export function PortfolioKPIs({
   const { t } = useTranslation();
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 md:gap-6 lg:grid-cols-3">
       <article className="flex h-full flex-col rounded-xl border border-zinc-700/50 bg-black p-4">
         <p className="text-xs font-medium text-zinc-400">{t("dashboard.totalWealth")}</p>
         <div className="mt-4 flex items-end justify-between gap-3">

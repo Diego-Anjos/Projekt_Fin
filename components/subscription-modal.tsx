@@ -206,7 +206,7 @@ function SubscriptionModalForm({
         role="dialog"
         aria-modal="true"
         aria-labelledby="subscription-modal-title"
-        className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 md:p-8"
+        className="relative max-h-[90vh] w-full max-w-[95vw] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 sm:max-w-xl md:max-w-3xl md:p-8"
         onClick={(event) => event.stopPropagation()}
       >
         <button

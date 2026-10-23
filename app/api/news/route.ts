@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isApiAuthError, requireApiSession } from "@/lib/appwrite/api-auth";
 
 const financialDomains =
   "infomoney.com.br,exame.com,valor.globo.com,investnews.com.br,sunoresearch.com.br,bloomberglinea.com.br";
@@ -15,6 +16,9 @@ function isNewsPayload(value: unknown): value is NewsApiPayload {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiSession(request);
+  if (isApiAuthError(auth)) return auth.error;
+
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const apiKey = process.env.NEWS_API_KEY;

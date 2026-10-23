@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isApiAuthError, requireApiSession } from "@/lib/appwrite/api-auth";
 
 const ALLOWED_TYPES = new Set(["stock", "fund", "bdr"]);
 
@@ -11,6 +12,9 @@ function isBrapiList(value: unknown): value is BrapiListResponse {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireApiSession(request);
+  if (isApiAuthError(auth)) return auth.error;
+
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") ?? "stock";
   const token = process.env.BRAPI_TOKEN;

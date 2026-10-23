@@ -5,7 +5,6 @@ import {
   ChartColumn,
   Layers,
   LayoutGrid,
-  Lightbulb,
   Newspaper,
   Settings,
   ShoppingBag,
@@ -15,6 +14,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { DailyTip } from "@/components/daily-tip";
 import { NotificationBell } from "@/components/notification-bell";
 import { useSession } from "@/components/require-session";
 import { useTranslation } from "@/hooks/use-translation";
@@ -121,13 +121,7 @@ export function Sidebar({
         </ul>
       </nav>
 
-      <div className="m-4 rounded-xl border border-[#113829] bg-[#0a241a] p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Lightbulb className="size-4 text-emerald-500" aria-hidden="true" />
-          <p className="text-sm font-semibold text-zinc-100">{t("sidebar.dailyTip")}</p>
-        </div>
-        <p className="text-sm leading-5 text-zinc-400">{t("sidebar.dailyTipText")}</p>
-      </div>
+      <DailyTip />
     </aside>
   );
 }

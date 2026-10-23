@@ -1,5 +1,6 @@
 import { Dumbbell, ShoppingCart, Utensils, Wallet, type LucideIcon } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
+import { formatInstallmentDescription } from "@/lib/installments";
 import type { Transaction } from "@/types/dashboard";
 
 const categoryIcons: Record<string, LucideIcon> = {
@@ -51,12 +52,19 @@ export function RecentTransactions({
             <tbody>
               {transactions.map((tx) => {
                 const CategoryIcon = categoryIcons[tx.category] ?? Wallet;
+                const description = formatInstallmentDescription(
+                  tx.description,
+                  tx.installmentNumber,
+                  tx.totalInstallments,
+                );
 
                 return (
                   <tr key={tx.id} className="border-t border-zinc-800">
                     <td className="hidden max-w-0 truncate py-3 pr-4 text-zinc-400 md:table-cell">{tx.id}</td>
                     <td className="hidden py-3 pr-4 whitespace-nowrap text-zinc-400 md:table-cell">{tx.date}</td>
-                    <td className="max-w-0 truncate py-3 pr-4 text-zinc-100">{tx.description}</td>
+                    <td className="max-w-0 truncate py-3 pr-4 text-zinc-100" title={description}>
+                      {description}
+                    </td>
                     <td className="hidden py-3 pr-4 sm:table-cell">
                       <span className="inline-flex max-w-full items-center gap-1.5 text-zinc-100">
                         <CategoryIcon className="size-3.5 shrink-0 text-zinc-400" aria-hidden="true" />

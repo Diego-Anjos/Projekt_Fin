@@ -62,6 +62,7 @@ export type Dictionary = {
     active: string;
     dailyTip: string;
     dailyTipText: string;
+    dailyTipLoading: string;
   };
   header: {
     search: string;
@@ -414,6 +415,20 @@ export type Dictionary = {
     income: string;
     expense: string;
     amount: string;
+    amountTotal: string;
+    amountInstallment: string;
+    amountHint: string;
+    amountTotalHint: string;
+    amountInstallmentHint: string;
+    installmentToggle: string;
+    installmentCount: string;
+    installmentCountHint: string;
+    installmentCountError: string;
+    installmentAmountError: string;
+    installmentPreview: string;
+    installmentPreviewAdjusted: string;
+    installmentEditNote: string;
+    installmentsCreated: string;
     date: string;
     description: string;
     descriptionPlaceholder: string;

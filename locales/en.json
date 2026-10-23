@@ -13,14 +13,16 @@
     "mainMenu": "Main menu",
     "active": "Active",
     "dailyTip": "Daily Tip:",
-    "dailyTipText": "Consolidate your subscriptions to save money this month."
+    "dailyTipText": "Consolidate your subscriptions to save money this month.",
+    "dailyTipLoading": "Analyzing your data..."
   },
   "header": {
     "search": "Search...",
     "header": "Header",
     "openMenu": "Open menu",
     "showBalances": "Show balances",
-    "hideBalances": "Hide balances"
+    "hideBalances": "Hide balances",
+    "selectLanguage": "Select language"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -366,6 +368,20 @@
     "income": "Income / Revenue",
     "expense": "Expense / Spending",
     "amount": "Amount ({symbol})",
+    "amountTotal": "Total amount ({symbol})",
+    "amountInstallment": "Installment amount ({symbol})",
+    "amountHint": "Amount of this single transaction.",
+    "amountTotalHint": "Enter the total amount. It will be split across the installments.",
+    "amountInstallmentHint": "Amount of this installment only. The other installments in the group stay unchanged.",
+    "installmentToggle": "Installment purchase?",
+    "installmentCount": "Number of installments",
+    "installmentCountHint": "Minimum 2. The first installment uses the date and status you choose; the rest stay pending, one per month.",
+    "installmentCountError": "Enter between 2 and 60 installments.",
+    "installmentAmountError": "The total is too small for that many installments.",
+    "installmentPreview": "Each installment: {amount}. {count} entries, one per month.",
+    "installmentPreviewAdjusted": "Installments of {amount}, and the last one of {last}, so the sum matches the total. {count} entries, one per month.",
+    "installmentEditNote": "Installment {current} of {total}. To pay it early, set the status to Paid and the date to today. Only this entry is updated.",
+    "installmentsCreated": "{count} installments saved successfully!",
     "date": "Transaction Date",
     "description": "Description",
     "descriptionPlaceholder": "Weekly groceries",

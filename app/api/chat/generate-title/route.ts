@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { isApiAuthError, requireApiSession } from "@/lib/appwrite/api-auth";
+import { sanitizeChatInput } from "@/lib/validation/chat";
 
 /**
  * POST /api/chat/generate-title — título curto (3–4 palavras) para uma
@@ -62,6 +64,9 @@ function cleanTitle(raw: string): string {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireApiSession(request);
+  if (isApiAuthError(auth)) return auth.error;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -75,8 +80,9 @@ export async function POST(request: Request) {
     .slice(0, MAX_MESSAGES)
     .map((message) => ({
       role: message.role,
-      content: message.content.slice(0, MAX_MESSAGE_CHARS),
-    }));
+      content: sanitizeChatInput(message.content, MAX_MESSAGE_CHARS),
+    }))
+    .filter((message) => message.content.length > 0);
 
   if (!messages.some((message) => message.role === "user")) {
     return NextResponse.json(

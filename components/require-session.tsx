@@ -1,6 +1,11 @@
 "use client";
 
-import { account } from "@/lib/appwrite/client";
+import {
+  clearAppSessionArtifacts,
+  getValidAccount,
+  markAppSession,
+  signOutCurrentSession,
+} from "@/lib/appwrite/session";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePreferences } from "@/contexts/preferences-context";
 import type { Models } from "appwrite";
@@ -37,20 +42,28 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
 
     async function loadSession() {
       try {
-        const currentUser = await account.get();
-        if (active) {
-          applyRemotePrefs(currentUser.prefs);
-          // Idioma cross-device: prefs.language aprendido no login,
-          // mesmo que o LanguageProvider tenha arrancado sem sessão.
-          applyRemoteLanguage(currentUser.prefs);
-          setUser(currentUser);
+        const currentUser = await getValidAccount();
+        if (!active) return;
+
+        if (!currentUser) {
+          clearAppSessionArtifacts();
+          setUser(null);
+          router.replace("/");
+          return;
         }
+
+        await markAppSession();
+        if (!active) return;
+        applyRemotePrefs(currentUser.prefs);
+        applyRemoteLanguage(currentUser.prefs);
+        setUser(currentUser);
       } catch {
+        if (!active) return;
+        clearAppSessionArtifacts();
+        setUser(null);
         router.replace("/");
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
@@ -62,13 +75,15 @@ export function RequireSession({ children }: { children: React.ReactNode }) {
   }, [applyRemotePrefs, applyRemoteLanguage, router]);
 
   async function logout() {
-    await account.deleteSession("current");
+    setUser(null);
+    await signOutCurrentSession();
     router.replace("/");
     router.refresh();
   }
 
   function syncUser(nextUser: Models.User) {
     setUser(nextUser);
+    void markAppSession();
   }
 
   if (loading || !user) {

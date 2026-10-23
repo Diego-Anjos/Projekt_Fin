@@ -2,10 +2,13 @@
 
 import { AiModelSelect } from "@/components/ui/ai-model-select";
 import {
+  CHAT_SESSIONS_UPDATED_EVENT,
   createChatSession,
   deleteChatSession,
+  fallbackChatTitle,
   generateChatTitle,
   listChatSessions,
+  notifyChatSessionsUpdated,
   parseStoredMessages,
   updateChatSession,
   type ChatSessionDocument,
@@ -13,16 +16,20 @@ import {
 } from "@/lib/appwrite/chat-sessions";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { loadFinancialContext } from "@/lib/chat/load-financial-context";
+import { cn } from "@/lib/utils";
+import { MAX_CHAT_MESSAGE_CHARS, sanitizeChatInput } from "@/lib/validation/chat";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
   AudioLines,
   DollarSign,
   History,
-  Loader2,
   MessageSquare,
   Minus,
   Settings2,
+  Square,
   Trash2,
   X,
 } from "lucide-react";
@@ -79,6 +86,27 @@ const loadingPhrases = [
   "A hackear a matriz de gastos...",
   "A sincronizar com o mainframe...",
 ] as const;
+
+const EMOTE_TAG_REGEX =
+  /^\s*\[EMOTE:\s*(happy|warning|neutral|thinking|error)\s*\]\s*/i;
+
+function parseStreamingEmotion(raw: string): { content: string; emotion: Emotion } {
+  const match = raw.match(EMOTE_TAG_REGEX);
+  if (!match) {
+    return { content: raw, emotion: "thinking" };
+  }
+  const emotion = match[1].toLowerCase() as Emotion;
+  return {
+    content: raw.slice(match[0].length),
+    emotion: emotion in EMOTION_AVATARS ? emotion : "neutral",
+  };
+}
+
+function toStoredMessages(conversation: ChatMessage[]): StoredChatMessage[] {
+  return conversation
+    .filter((message) => message.id !== QUANTUM_WELCOME.id)
+    .map(({ id, role, content, emotion }) => ({ id, role, content, emotion }));
+}
 
 function getInitials(name: string, email: string) {
   const source = name.trim() || email;
@@ -166,6 +194,7 @@ export function AiCommandBar() {
   const persistChainRef = useRef<Promise<void>>(Promise.resolve());
   // Incrementado ao fechar/carregar outra conversa: saves antigos são ignorados.
   const conversationEpochRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>(AI_MODELS[0].id);
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -179,6 +208,8 @@ export function AiCommandBar() {
   const avatarUrl = typeof user.prefs.avatarUrl === "string" ? user.prefs.avatarUrl : "";
   const initials = getInitials(user.name, user.email);
   const showChat = isExpanded && messages.length > 0 && isChatVisible;
+  /** Snapshot financeiro para a Quantum.IA (saldo / assinaturas / metas). */
+  const financialContextRef = useRef<FinancialContextPayload | null>(null);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -244,65 +275,169 @@ export function AiCommandBar() {
     setSessionId(next);
   }
 
-  // Lista as sessões do utilizador (mais recentes primeiro). Falhas de
-  // rede/coleção em falta degradam p/ lista vazia — o chat nunca quebra.
+  /** Insere/atualiza uma sessão na sidebar de imediato (otimista). */
+  function upsertSessionInSidebar(session: ChatSessionDocument) {
+    setRecentConversations((current) => {
+      const without = current.filter((item) => item.$id !== session.$id);
+      return [session, ...without];
+    });
+    setIsLoadingSessions(false);
+  }
+
+  /**
+   * Refetch da lista. Se o Appwrite falhar (`null`), mantém o estado atual
+   * para não apagar itens já mostrados via upsert otimista.
+   */
+  async function refreshChatSessions() {
+    try {
+      const documents = await listChatSessions(user.$id);
+      if (documents === null) {
+        console.warn(
+          "[chat] listChatSessions falhou — a manter a lista local da sidebar.",
+        );
+        return null;
+      }
+      setRecentConversations(documents);
+      return documents;
+    } catch (error) {
+      console.error("Falha ao listar sessões de chat:", error);
+      return null;
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }
+
+  // Fetch inicial + listener do custom event (sincroniza Chat → Sidebar).
   useEffect(() => {
     let active = true;
-    listChatSessions(user.$id)
-      .then((documents) => {
-        if (active) setRecentConversations(documents);
-      })
-      .catch((error) => {
-        console.error("Falha ao carregar o histórico de chat:", error);
-        if (active) setRecentConversations([]);
-      })
-      .finally(() => {
-        if (active) setIsLoadingSessions(false);
-      });
+    setIsLoadingSessions(true);
+
+    void listChatSessions(user.$id).then((documents) => {
+      if (!active) return;
+      if (documents !== null) setRecentConversations(documents);
+      setIsLoadingSessions(false);
+    });
+
+    function onChatSessionsUpdated() {
+      void refreshChatSessions();
+    }
+
+    window.addEventListener(CHAT_SESSIONS_UPDATED_EVENT, onChatSessionsUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(
+        CHAT_SESSIONS_UPDATED_EVENT,
+        onChatSessionsUpdated,
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh fecha sobre user.$id
+  }, [user.$id]);
+
+  // Pré-carrega contexto financeiro; refresca ao expandir o chat.
+  useEffect(() => {
+    let active = true;
+    void loadFinancialContext(user.$id).then((context) => {
+      if (active) financialContextRef.current = context;
+    });
     return () => {
       active = false;
     };
-  }, [user.$id]);
+  }, [user.$id, isExpanded]);
+
+  // Ao abrir o histórico, força refetch (sem limpar se falhar).
+  useEffect(() => {
+    if (!showHistory) return;
+    void refreshChatSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHistory, user.$id]);
 
   /**
-   * Persiste a conversa sem bloquear o chat. Primeira interação real
-   * (ainda sem sessionId): gera o título por IA e cria o documento.
-   * Seguintes: apenas updateDocument com o array completo de mensagens.
+   * Persiste a conversa após o stream terminar (equivalente a onFinish).
+   * Sem sessionId → createDocument + título automático.
+   * Com sessionId → updateDocument com o array completo de mensagens.
+   * Após sucesso: upsert otimista + evento para a sidebar refetch.
    */
   function persistConversation(conversation: StoredChatMessage[], epoch: number) {
-    persistChainRef.current = persistChainRef.current
+    const run = persistChainRef.current
       .catch(() => {})
       .then(async () => {
-        if (epoch !== conversationEpochRef.current) return; // conversa já trocou
+        if (epoch !== conversationEpochRef.current) return;
+        if (conversation.length === 0) return;
+
+        console.log("Tentando salvar no Appwrite...", { messages: conversation });
+
         try {
           const currentSessionId = sessionIdRef.current;
           if (!currentSessionId) {
-            const title = await generateChatTitle(conversation);
-            if (epoch !== conversationEpochRef.current) return;
+            const localTitle = fallbackChatTitle(conversation);
+            const titlePromise = generateChatTitle(conversation);
             const created = await createChatSession({
               userId: user.$id,
-              title,
+              title: localTitle,
               messages: conversation,
             });
+            if (epoch !== conversationEpochRef.current) return;
+
+            // 1) Estado local imediato  2) marcar ativo  3) evento (histórico só abre no clique)
+            upsertSessionInSidebar(created);
             setActiveSessionId(created.$id);
-            setRecentConversations((current) => [
-              created,
-              ...current.filter((item) => item.$id !== created.$id),
-            ]);
+            notifyChatSessionsUpdated({ sessionId: created.$id });
+
+            void titlePromise.then(async (aiTitle) => {
+              if (
+                !aiTitle ||
+                aiTitle === localTitle ||
+                sessionIdRef.current !== created.$id
+              ) {
+                return;
+              }
+              try {
+                const updated = await updateChatSession(
+                  created.$id,
+                  conversation,
+                  aiTitle,
+                );
+                upsertSessionInSidebar(updated);
+                notifyChatSessionsUpdated({ sessionId: updated.$id });
+              } catch (titleError) {
+                console.error(
+                  "Falha ao atualizar o título da sessão de chat:",
+                  titleError,
+                );
+              }
+            });
           } else {
-            const updated = await updateChatSession(currentSessionId, conversation);
-            setRecentConversations((current) =>
-              current.map((item) => (item.$id === updated.$id ? updated : item)),
+            const updated = await updateChatSession(
+              currentSessionId,
+              conversation,
             );
+            if (epoch !== conversationEpochRef.current) return;
+            upsertSessionInSidebar(updated);
+            notifyChatSessionsUpdated({ sessionId: updated.$id });
           }
         } catch (error) {
-          // Appwrite indisponível/coleção em falta: conversa fica só local.
           console.error("Falha ao guardar a sessão de chat:", error);
+          const details =
+            error && typeof error === "object"
+              ? {
+                  message: (error as Error).message,
+                  code: (error as { code?: number }).code,
+                  type: (error as { type?: string }).type,
+                }
+              : { message: String(error) };
+          console.error("[chat] detalhes do erro Appwrite:", details);
         }
       });
+    persistChainRef.current = run;
+    return run;
+  }
+
+  function stopGeneration() {
+    abortControllerRef.current?.abort();
   }
 
   function handleLoadSession(session: ChatSessionDocument) {
+    abortControllerRef.current?.abort();
     const stored = parseStoredMessages(session.messages) as ChatMessage[];
     conversationEpochRef.current += 1;
     setActiveSessionId(session.$id);
@@ -310,9 +445,11 @@ export function AiCommandBar() {
     setIsChatVisible(true);
     setIsExpanded(true);
     setShowHistory(false);
+    setIsLoading(false);
   }
 
   function handleClose() {
+    abortControllerRef.current?.abort();
     conversationEpochRef.current += 1;
     setActiveSessionId(null);
     setMessages([QUANTUM_WELCOME]);
@@ -341,162 +478,317 @@ export function AiCommandBar() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = query.trim();
+    const value = sanitizeChatInput(query, MAX_CHAT_MESSAGE_CHARS);
     if (!value || isLoading) return;
 
+    const epoch = conversationEpochRef.current;
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: value,
     };
+    const assistantId = crypto.randomUUID();
     const nextMessages = [...messages, userMessage];
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      emotion: "thinking",
+    };
 
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Fecha o histórico no mobile para a área de chat ficar visível.
+    setShowHistory(false);
     setIsChatVisible(true);
-    setMessages(nextMessages);
+    setMessages([...nextMessages, assistantPlaceholder]);
     setQuery("");
     setIsLoading(true);
 
+    let rawStream = "";
+    let finalAssistant: ChatMessage = assistantPlaceholder;
+
     try {
+      // Dados reais do utilizador: refresca antes de cada pedido para respostas exactas.
+      const financialContext =
+        (await loadFinancialContext(user.$id).catch(() => null)) ??
+        financialContextRef.current ?? {
+          saldo: 0,
+          assinaturas: [] as string[],
+          metas: [] as string[],
+        };
+      financialContextRef.current = financialContext;
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
-          messages: nextMessages
-            .filter((message) => message.id !== QUANTUM_WELCOME.id)
-            .map(({ role, content }) => ({ role, content })),
+          messages: toStoredMessages(nextMessages).map(({ role, content }) => ({
+            role,
+            content,
+          })),
           model: selectedModel,
           currency: currency || "BRL",
+          financialContext,
         }),
       });
 
-      const data = (await response.json()) as {
-        response?: string;
-        emotion?: Emotion;
-        error?: string;
-      };
-
-      if (!response.ok || !data.response) {
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         setIsAiAvailable(false);
-        throw new Error(data.error || "Não foi possível obter resposta da IA.");
+        throw new Error(data?.error || "Não foi possível obter resposta da IA.");
       }
 
-      const emotion: Emotion =
-        data.emotion && data.emotion in EMOTION_AVATARS
-          ? data.emotion
-          : "neutral";
+      if (!response.body) {
+        throw new Error("Resposta sem corpo (stream indisponível).");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let event: {
+            type?: string;
+            text?: string;
+            response?: string;
+            emotion?: Emotion;
+            error?: string;
+            raw?: string;
+          };
+          try {
+            event = JSON.parse(trimmed) as typeof event;
+          } catch {
+            continue;
+          }
+
+          if (event.type === "delta" && typeof event.text === "string") {
+            rawStream += event.text;
+            const parsed = parseStreamingEmotion(rawStream);
+            finalAssistant = {
+              id: assistantId,
+              role: "assistant",
+              content: parsed.content,
+              emotion: parsed.emotion,
+            };
+            setMessages([...nextMessages, finalAssistant]);
+          } else if (event.type === "done") {
+            const content =
+              typeof event.response === "string"
+                ? event.response
+                : parseStreamingEmotion(rawStream).content;
+            const emotion: Emotion =
+              event.emotion && event.emotion in EMOTION_AVATARS
+                ? event.emotion
+                : parseStreamingEmotion(rawStream).emotion;
+            finalAssistant = {
+              id: assistantId,
+              role: "assistant",
+              content,
+              emotion: emotion === "thinking" ? "neutral" : emotion,
+            };
+            setMessages([...nextMessages, finalAssistant]);
+          } else if (event.type === "aborted") {
+            if (typeof event.raw === "string" && event.raw) {
+              rawStream = event.raw;
+              const parsed = parseStreamingEmotion(rawStream);
+              finalAssistant = {
+                id: assistantId,
+                role: "assistant",
+                content: parsed.content || rawStream,
+                emotion: parsed.emotion === "thinking" ? "neutral" : parsed.emotion,
+              };
+              setMessages([...nextMessages, finalAssistant]);
+            }
+          } else if (event.type === "error") {
+            setIsAiAvailable(false);
+            throw new Error(event.error || "Falha ao gerar resposta.");
+          }
+        }
+      }
 
       setIsAiAvailable(true);
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.response as string,
-        emotion,
-      };
-      setMessages((current) => [...current, assistantMessage]);
-      // Guardar sem bloquear: 1.ª interação cria a sessão (com título IA),
-      // seguintes só atualizam o mesmo documento.
-      persistConversation(
-        [...nextMessages, assistantMessage].filter(
-          (message) => message.id !== QUANTUM_WELCOME.id,
-        ),
-        conversationEpochRef.current,
-      );
+
+      const conversationForSave = finalAssistant.content.trim()
+        ? [...nextMessages, finalAssistant]
+        : nextMessages;
+
+      await persistConversation(toStoredMessages(conversationForSave), epoch);
     } catch (error) {
-      setIsAiAvailable(false);
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Ocorreu um erro ao contactar o assistente.";
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
+      if (
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        if (finalAssistant.content.trim()) {
+          setMessages([...nextMessages, finalAssistant]);
+          await persistConversation(
+            toStoredMessages([...nextMessages, finalAssistant]),
+            epoch,
+          );
+        } else {
+          setMessages(nextMessages);
+          await persistConversation(toStoredMessages(nextMessages), epoch);
+        }
+      } else {
+        setIsAiAvailable(false);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Ocorreu um erro ao contactar o assistente.";
+        const errorMessage: ChatMessage = {
+          id: assistantId,
           role: "assistant",
           content: `Desculpa, algo falhou: ${message}`,
           emotion: "error",
-        },
-      ]);
+        };
+        setMessages([...nextMessages, errorMessage]);
+      }
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsLoading(false);
     }
   }
 
   return (
     <div
-      className={`pointer-events-none fixed z-20 flex ${
+      ref={containerRef}
+      aria-expanded={isExpanded}
+      className={cn(
+        "fixed bottom-6 z-50 flex flex-col transition-all duration-300",
         isExpanded
-          ? "inset-x-0 bottom-4 justify-center md:bottom-8"
-          : "right-4 bottom-4 justify-end md:right-8 md:bottom-8"
-      }`}
+          ? "left-1/2 -translate-x-1/2 items-center"
+          : "right-6 items-end justify-end",
+      )}
     >
-      <div
-        ref={containerRef}
-        aria-expanded={isExpanded}
-        className={`pointer-events-auto relative transition-all duration-500 ease-in-out ${
-          isExpanded
-            ? showHistory
-              ? "w-[95%] max-w-lg md:max-w-4xl"
-              : "w-[95%] max-w-lg md:max-w-2xl"
-            : "w-14"
-        }`}
-      >
-        {showChat ? (
-          <div className="absolute inset-x-0 bottom-full z-30 mb-4 md:mb-12">
-            <div className="pf-chat-rise flex max-h-[60vh] w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#0a0f0d]/90 shadow-2xl backdrop-blur-xl">
+      {/* ESTADO FECHADO: Apenas o Avatar flutuante */}
+      {!isExpanded && (
+        <button
+          type="button"
+          aria-label="Abrir Quantum.IA"
+          onClick={() => setIsExpanded(true)}
+          className="relative flex h-14 w-14 items-center justify-center transition-transform hover:scale-105 md:h-16 md:w-16"
+        >
+          <div
+            aria-hidden="true"
+            className="absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-green-600/30 blur-md md:h-14 md:w-14"
+          />
+          {iconFailed ? (
+            <DollarSign className="relative z-10 h-8 w-8 text-green-500" aria-hidden="true" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={ROBOT_MAIN}
+              alt="IA"
+              draggable={false}
+              className="relative z-10 h-full w-full object-contain mix-blend-screen"
+              onError={() => setIconFailed(true)}
+            />
+          )}
+        </button>
+      )}
+
+      {/* ESTADO ABERTO: Painel de mensagens + barra de input */}
+      {isExpanded && (
+        <div className="flex w-[95vw] max-w-full flex-col gap-3 md:w-[600px] xl:w-[700px]">
+          {/* PAINEL DE MENSAGENS (Histórico) — empilhado acima da barra, sem absolute */}
+          {showChat ? (
+            <div className="pf-chat-rise flex max-h-[60vh] w-full flex-col overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#0a0f0d]/90 shadow-[0_0_15px_rgba(34,197,94,0.1)] backdrop-blur-xl">
+            <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden md:flex-row">
               <AnimatePresence initial={false}>
                 {showHistory ? (
                   <motion.aside
                     key="history-panel"
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: "auto", opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: "easeInOut" }}
-                    className="hidden shrink-0 overflow-hidden border-r border-emerald-500/20 md:block"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="absolute inset-0 z-20 flex w-full flex-col overflow-hidden border-emerald-500/20 bg-[#0a0f0d] md:relative md:inset-auto md:z-auto md:w-auto md:shrink-0 md:border-r md:bg-transparent"
                   >
-                    <div className="flex h-full w-48 flex-col gap-3 p-4 md:w-56 lg:w-64">
-                      <p className="text-xs font-medium tracking-wide text-emerald-400/80 uppercase">
-                        Conversas Recentes
-                      </p>
-                      <ul className="flex flex-col gap-1">
+                    <div className="flex h-full w-full flex-col gap-3 p-4 md:w-56 lg:w-64">
+                      <div className="flex items-center justify-between gap-2 md:block">
+                        <p className="text-xs font-medium tracking-wide text-emerald-400/80 uppercase">
+                          Conversas Recentes
+                        </p>
+                        <button
+                          type="button"
+                          aria-label="Fechar histórico"
+                          onClick={() => setShowHistory(false)}
+                          className="flex size-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300 md:hidden"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <ul className="flex flex-col gap-1 overflow-y-auto">
                         {isLoadingSessions ? (
                           <li className="px-2.5 py-2 text-xs text-zinc-500">
                             A carregar conversas…
                           </li>
                         ) : recentConversations.length === 0 ? (
                           <li className="px-2.5 py-2 text-xs text-zinc-500">
-                            Nenhuma conversa recente.
+                            Nenhuma conversa encontrada
                           </li>
                         ) : (
-                          recentConversations.map((item) => (
-                            <li key={item.$id}>
-                              <div className="group flex w-full items-center justify-between rounded-lg p-2 text-sm text-zinc-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-50">
-                                <button
-                                  type="button"
-                                  onClick={() => handleLoadSession(item)}
-                                  aria-current={sessionId === item.$id || undefined}
-                                  className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
+                          recentConversations.map((item) => {
+                            const isActive = sessionId === item.$id;
+                            return (
+                              <li key={item.$id}>
+                                <div
+                                  className={`group flex w-full items-center justify-between rounded-lg p-2 text-sm transition-colors ${
+                                    isActive
+                                      ? "bg-emerald-500/15 text-emerald-50 ring-1 ring-emerald-500/40"
+                                      : "text-zinc-300 hover:bg-emerald-500/10 hover:text-emerald-50"
+                                  }`}
                                 >
-                                  <MessageSquare
-                                    className="size-3.5 shrink-0 text-emerald-500/70"
-                                    aria-hidden="true"
-                                  />
-                                  <span className="truncate">{item.title}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleDeleteHistoryItem(item.$id);
-                                  }}
-                                  className="ml-2 flex shrink-0 rounded p-1 text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
-                                  title="Apagar conversa"
-                                  aria-label={`Apagar conversa ${item.title}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </li>
-                          ))
+                                  <button
+                                    type="button"
+                                    onClick={() => handleLoadSession(item)}
+                                    aria-current={isActive || undefined}
+                                    className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
+                                  >
+                                    <MessageSquare
+                                      className={`size-3.5 shrink-0 ${
+                                        isActive
+                                          ? "text-emerald-400"
+                                          : "text-emerald-500/70"
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                    <span className="truncate font-medium">
+                                      {item.title}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleDeleteHistoryItem(item.$id);
+                                    }}
+                                    className="ml-2 flex shrink-0 rounded p-1 text-zinc-400 opacity-100 transition-all md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
+                                    title="Apagar conversa"
+                                    aria-label={`Apagar conversa ${item.title}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })
                         )}
                       </ul>
                     </div>
@@ -504,8 +796,8 @@ export function AiCommandBar() {
                 ) : null}
               </AnimatePresence>
 
-              <div className="flex min-w-0 flex-1 flex-col p-4 md:p-5">
-                <header className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-500/20 pb-3">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4 md:p-5">
+                <header className="mb-4 flex shrink-0 items-center justify-between gap-2 border-b border-emerald-500/20 pb-3">
                   <button
                     type="button"
                     aria-label={showHistory ? "Ocultar histórico" : "Mostrar histórico"}
@@ -580,11 +872,20 @@ export function AiCommandBar() {
                   role="log"
                   aria-live="polite"
                   aria-label="Conversa com a Quantum.IA"
-                  className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto"
+                  className="scrollbar-hide flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
                 >
                   <AnimatePresence initial={false}>
                     {messages.map((message) => {
                       const isUser = message.role === "user";
+                      // Placeholder vazio enquanto espera o 1.º token — o bubble "thinking" cobre.
+                      if (
+                        !isUser &&
+                        !message.content.trim() &&
+                        isLoading &&
+                        message.id === messages[messages.length - 1]?.id
+                      ) {
+                        return null;
+                      }
 
                       return (
                         <motion.div
@@ -624,14 +925,29 @@ export function AiCommandBar() {
                             {isUser ? (
                               message.content
                             ) : (
-                              <MessageMarkdown content={message.content} />
+                              <>
+                                <MessageMarkdown content={message.content} />
+                                {isLoading &&
+                                message.id === messages[messages.length - 1]?.id ? (
+                                  <span
+                                    className="ml-0.5 inline-block animate-pulse text-emerald-400"
+                                    aria-hidden="true"
+                                  >
+                                    _
+                                  </span>
+                                ) : null}
+                              </>
                             )}
                           </div>
                         </motion.div>
                       );
                     })}
 
-                    {isLoading ? (
+                    {isLoading &&
+                    !(
+                      messages[messages.length - 1]?.role === "assistant" &&
+                      messages[messages.length - 1]?.content.trim()
+                    ) ? (
                       <motion.div
                         key="thinking"
                         initial={{ opacity: 0, y: 15, scale: 0.95 }}
@@ -658,110 +974,89 @@ export function AiCommandBar() {
               </div>
             </div>
           </div>
-        ) : null}
-        <form
-          onSubmit={handleSubmit}
-          onClick={() => {
-            if (!isExpanded) setIsExpanded(true);
-          }}
-          className={`relative flex h-14 w-full items-center rounded-full border border-emerald-500/40 bg-[#0a0f0d]/90 backdrop-blur-xl transition-all duration-500 ease-in-out ${
-            isExpanded
-              ? "gap-2 pr-2 pl-1 shadow-[0_0_28px_rgba(16,185,129,0.22)]"
-              : "cursor-pointer justify-center hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-          }`}
-        >
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="AI Command"
-            className="group relative flex h-14 w-14 flex-shrink-0 cursor-pointer items-center justify-center"
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsExpanded(!isExpanded);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsExpanded((current) => !current);
-              }
-            }}
-          >
-            {iconFailed ? (
-              <DollarSign
-                className="h-8 w-8 text-emerald-400 transition-transform group-hover:scale-110"
-                aria-hidden="true"
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={ROBOT_MAIN}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute top-1/2 left-1/2 h-32 w-32 max-w-none -translate-x-1/2 -translate-y-[55%] object-contain mix-blend-screen transition-transform duration-300 group-hover:scale-110"
-                onError={() => setIconFailed(true)}
-              />
-            )}
-          </div>
+          ) : null}
 
-          <div
-            className={`grid min-w-0 overflow-hidden transition-[grid-template-columns] duration-500 ease-in-out ${
-              isExpanded ? "flex-1 grid-cols-[1fr]" : "w-0 grid-cols-[0fr]"
-            }`}
+          {/* Avatar e Input lado a lado (Flexbox real) */}
+          <form
+            onSubmit={handleSubmit}
+            className="flex w-full items-center gap-3 md:gap-4"
           >
-            <div
-              className={`flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap transition-opacity ease-in-out ${
-                isExpanded
-                  ? "opacity-100 delay-200 duration-300"
-                  : "pointer-events-none opacity-0 duration-150"
-              }`}
+            {/* Avatar Lado a Lado (Atua como botão de fechar) */}
+            <button
+              type="button"
+              aria-label="Recolher Quantum.IA"
+              onClick={() => setIsExpanded(false)}
+              className="relative flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center md:h-16 md:w-16"
             >
+              <div
+                aria-hidden="true"
+                className="absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-green-600/30 blur-md md:h-14 md:w-14"
+              />
+              {iconFailed ? (
+                <DollarSign className="relative z-10 h-8 w-8 text-green-500" aria-hidden="true" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={ROBOT_MAIN}
+                  alt="IA"
+                  draggable={false}
+                  className="relative z-10 h-full w-full object-contain mix-blend-screen"
+                  onError={() => setIconFailed(true)}
+                />
+              )}
+            </button>
+
+            {/* Input Field e Botões */}
+            <div className="relative flex h-12 flex-1 items-center rounded-full shadow-[0_0_15px_rgba(34,197,94,0.1)] md:h-14">
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) =>
+                  setQuery(event.target.value.slice(0, MAX_CHAT_MESSAGE_CHARS))
+                }
                 type="text"
-                placeholder="Hackeie as suas finanças com a Quantum.IA..."
+                maxLength={MAX_CHAT_MESSAGE_CHARS}
                 aria-label="Hackeie as suas finanças com a Quantum.IA"
                 disabled={isLoading}
-                tabIndex={isExpanded ? 0 : -1}
-                className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder="Hackeie as suas finanças com a Quantum.IA..."
+                className="h-full w-full rounded-full border border-green-900/50 bg-[#0B1410] pr-[88px] pl-5 text-white placeholder:text-gray-500 transition-colors focus:border-green-500 focus:outline-none"
               />
-              <button
-                type="button"
-                aria-label={isRecording ? "Parar gravação" : "Gravar áudio"}
-                aria-pressed={isRecording}
-                disabled={isLoading}
-                tabIndex={isExpanded ? 0 : -1}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setIsRecording((current) => !current);
-                }}
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                  isRecording
-                    ? "bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/50"
-                    : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                }`}
-              >
-                <AudioLines className="size-4" aria-hidden="true" />
-              </button>
-              <button
-                type="submit"
-                aria-label={isLoading ? "A processar" : "Enviar"}
-                disabled={isLoading}
-                tabIndex={isExpanded ? 0 : -1}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
-              >
+
+              <div className="absolute right-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={isRecording ? "Parar gravação" : "Gravar áudio"}
+                  aria-pressed={isRecording}
+                  disabled={isLoading}
+                  onClick={() => setIsRecording((current) => !current)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-green-500 transition-colors hover:bg-green-500/10"
+                >
+                  <AudioLines className="size-4 shrink-0" aria-hidden="true" />
+                </button>
+
                 {isLoading ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <button
+                    type="button"
+                    aria-label="Parar geração"
+                    onClick={stopGeneration}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-600 text-white transition-colors hover:bg-green-500"
+                  >
+                    <Square className="size-3.5 shrink-0 fill-current" aria-hidden="true" />
+                  </button>
                 ) : (
-                  <ArrowRight className="size-4" aria-hidden="true" />
+                  <button
+                    type="submit"
+                    aria-label="Enviar"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-600 text-white transition-colors hover:bg-green-500"
+                  >
+                    <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

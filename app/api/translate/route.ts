@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { isApiAuthError, requireApiSession } from "@/lib/appwrite/api-auth";
 import {
   defaultLocale,
   languageCodes,
@@ -10,35 +11,9 @@ import {
  * POST /api/translate — tradução de conteúdo dinâmico (manchetes de notícias,
  * títulos/descrições de metas, etc.) para o idioma ativo da interface.
  *
- * Dois formatos (retrocompatível):
- * - Um texto:  `{ text, targetLanguage, sourceLanguage? }`
- *              → `{ translatedText, ... }`
- * - **Batch:** `{ texts: string[], targetLanguage, sourceLanguage? }`
- *              → `{ translatedTexts: string[], ... }` (alinhado com o input)
- *   É o formato das listas (Notícias): 40 textos = **1 pedido HTTP**, e por
- *   dentro 1 chamada ao provider (DeepL aceita arrays nativamente; o Gemini
- *   recebe a lista em JSON num único prompt). Duplicados no batch são
- *   traduzidos uma vez; hits da cache do servidor nem chegam ao provider.
- *
- * Providers (por ordem, selecionável com TRANSLATION_PROVIDER=deepl|gemini):
- *  1. DeepL  — se `DEEPL_API_KEY` existir (serviço dedicado, rápido/barato).
- *     Para conta Pro define `DEEPL_API_URL=https://api.deepl.com/v2/translate`.
- *  2. Gemini — reutiliza a `GEMINI_API_KEY` já usada por /api/chat, com a
- *     mesma fila de modelos dessa rota (default: gemini-3.8-flash, com
- *     fallback 3.6-flash → 3.5-flash-lite). Ajustável com
- *     `GEMINI_TRANSLATE_MODEL`.
- *  TODO(google): para Google Cloud Translation, adicionar um provider
- *  `translateWithGoogle()` com `GOOGLE_TRANSLATE_API_KEY` e incluí-lo
- *  em `PROVIDER_ORDER`/na seleção abaixo — o resto da rota não muda.
- *
- * Sem provider configurado devolve 503 com `fallback: true` e os textos
- * originais, para o cliente degradar graciosamente (mostra o original).
- *
- * Nota de segurança: tal como /api/chat, este endpoint não exige sessão.
- * Mitigações incluídas: limites de tamanho (por texto, por batch e total),
- * allowlist de idiomas, cache em memória e rate-limit por IP ponderado pelo
- * nº de textos que realmente chegam ao provider. TODO(auth): exigir sessão
- * Appwrite antes de produção pública para não expor quota da chave de IA.
+ * Exige sessão Appwrite válida (cookie `pf_aw_session` / Bearer).
+ * Mitigações adicionais: limites de tamanho, allowlist de idiomas,
+ * cache em memória e rate-limit por IP.
  */
 
 export const runtime = "nodejs";
@@ -313,6 +288,9 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireApiSession(request);
+  if (isApiAuthError(auth)) return auth.error;
+
   let body: unknown;
   try {
     body = await request.json();

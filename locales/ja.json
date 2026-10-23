@@ -13,14 +13,16 @@
     "mainMenu": "メインメニュー",
     "active": "アクティブ",
     "dailyTip": "今日のヒント:",
-    "dailyTipText": "サブスクリプションをまとめて、今月の支出を節約しましょう。"
+    "dailyTipText": "サブスクリプションをまとめて、今月の支出を節約しましょう。",
+    "dailyTipLoading": "データを分析中..."
   },
   "header": {
     "search": "検索...",
     "header": "ヘッダー",
     "openMenu": "メニューを開く",
     "showBalances": "残高を表示",
-    "hideBalances": "残高を隠す"
+    "hideBalances": "残高を隠す",
+    "selectLanguage": "言語を選択"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -366,6 +368,20 @@
     "income": "収入 / 収益",
     "expense": "支出 / 経費",
     "amount": "金額 ({symbol})",
+    "amountTotal": "合計金額 ({symbol})",
+    "amountInstallment": "分割の金額 ({symbol})",
+    "amountHint": "この取引の金額です。",
+    "amountTotalHint": "合計金額を入力してください。分割数で割り算します。",
+    "amountInstallmentHint": "この回だけの金額です。同じグループの他の分割は変わりません。",
+    "installmentToggle": "分割払い？",
+    "installmentCount": "分割回数",
+    "installmentCountHint": "最小2回。初回は選んだ日付とステータスを使い、以降は未払いとして毎月1件ずつ作成されます。",
+    "installmentCountError": "2から60の分割回数を入力してください。",
+    "installmentAmountError": "合計金額が分割回数に対して小さすぎます。",
+    "installmentPreview": "各回: {amount}。{count}件を毎月1件ずつ作成します。",
+    "installmentPreviewAdjusted": "各回 {amount}、最終回は {last} で合計が一致します。{count}件を毎月1件ずつ作成します。",
+    "installmentEditNote": "{total}回中{current}回目。前倒しにするにはステータスを支払済にし、日付を今日にします。更新されるのはこの件だけです。",
+    "installmentsCreated": "{count}件の分割を保存しました。",
     "date": "取引日",
     "description": "説明",
     "descriptionPlaceholder": "今週の買い物",

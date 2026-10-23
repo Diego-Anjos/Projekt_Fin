@@ -13,14 +13,16 @@
     "mainMenu": "Menu principal",
     "active": "Actif",
     "dailyTip": "Conseil du jour :",
-    "dailyTipText": "Regroupez vos abonnements pour économiser de l'argent ce mois-ci."
+    "dailyTipText": "Regroupez vos abonnements pour économiser de l'argent ce mois-ci.",
+    "dailyTipLoading": "Analyse de vos données..."
   },
   "header": {
     "search": "Rechercher...",
     "header": "En-tête",
     "openMenu": "Ouvrir le menu",
     "showBalances": "Afficher les soldes",
-    "hideBalances": "Masquer les soldes"
+    "hideBalances": "Masquer les soldes",
+    "selectLanguage": "Choisir la langue"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -366,6 +368,20 @@
     "income": "Entrée / Revenu",
     "expense": "Sortie / Dépense",
     "amount": "Montant ({symbol})",
+    "amountTotal": "Montant total ({symbol})",
+    "amountInstallment": "Montant de l'échéance ({symbol})",
+    "amountHint": "Montant de cette transaction.",
+    "amountTotalHint": "Saisissez le montant total. Il sera réparti entre les échéances.",
+    "amountInstallmentHint": "Montant de cette échéance seulement. Les autres échéances du groupe ne changent pas.",
+    "installmentToggle": "Achat en plusieurs fois ?",
+    "installmentCount": "Nombre d'échéances",
+    "installmentCountHint": "Minimum 2. La première échéance utilise la date et le statut choisis ; les suivantes restent en attente, une par mois.",
+    "installmentCountError": "Indiquez entre 2 et 60 échéances.",
+    "installmentAmountError": "Le montant total est trop faible pour autant d'échéances.",
+    "installmentPreview": "Chaque échéance : {amount}. {count} écritures, une par mois.",
+    "installmentPreviewAdjusted": "Échéances de {amount} et la dernière de {last}, pour que la somme corresponde au total. {count} écritures, une par mois.",
+    "installmentEditNote": "Échéance {current} sur {total}. Pour l'anticiper, passez le statut à Payé et la date à aujourd'hui. Seule cette écriture est mise à jour.",
+    "installmentsCreated": "{count} échéances enregistrées avec succès !",
     "date": "Date de la Transaction",
     "description": "Description",
     "descriptionPlaceholder": "Courses de la semaine",

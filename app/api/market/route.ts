@@ -1,3 +1,5 @@
+import { isApiAuthError, requireApiSession } from "@/lib/appwrite/api-auth";
+
 type HgCurrency = {
   buy?: unknown;
   variation?: unknown;
@@ -98,7 +100,12 @@ function readBitcoinBrl(
   return { buy: brlPrice, variation: brlVariation };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireApiSession(request);
+  if (isApiAuthError(auth)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.HG_BRASIL_API_KEY;
 
   if (!apiKey) {

@@ -15,6 +15,7 @@ import {
   deleteAllUserData,
   fetchAllUserData,
 } from "@/lib/appwrite/user-data";
+import { clearAppSessionArtifacts, signOutCurrentSession } from "@/lib/appwrite/session";
 import { buildUserDataCsv, downloadCsv } from "@/lib/export-csv";
 import { useTranslation } from "@/hooks/use-translation";
 import { useRouter } from "next/navigation";
@@ -50,7 +51,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex w-full flex-col gap-4 md:gap-6">
-      <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-6 py-5">
+      <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-4 py-5 md:px-6">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
           {t("settings.title")}
         </h1>
@@ -59,37 +60,40 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-8 md:flex-row">
+      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
         <nav aria-label={t("settings.navAria")} className="w-full shrink-0 md:w-[250px]">
-          <ul className="flex flex-col gap-1">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
+          {/* Mobile: scroll horizontal; desktop: coluna estática */}
+          <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide pb-2 md:overflow-visible md:whitespace-normal md:pb-0">
+            <ul className="flex flex-row gap-1 md:w-full md:flex-col">
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
 
-              return (
-                <li key={tab.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={
-                      isActive
-                        ? "flex w-full items-center gap-3 rounded-lg bg-zinc-800/50 px-3 py-2.5 text-left text-sm font-medium text-emerald-500 transition-colors duration-200"
-                        : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-zinc-400 transition-colors duration-200 hover:text-zinc-200"
-                    }
-                  >
-                    <tab.icon className="size-4 shrink-0" aria-hidden="true" />
-                    {t(tab.labelKey)}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                return (
+                  <li key={tab.id} className="shrink-0 md:shrink md:w-full">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      aria-current={isActive ? "page" : undefined}
+                      className={
+                        isActive
+                          ? "flex w-full items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2.5 text-left text-sm font-medium text-emerald-500 transition-colors duration-200 md:gap-3"
+                          : "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-zinc-400 transition-colors duration-200 hover:text-zinc-200 md:gap-3"
+                      }
+                    >
+                      <tab.icon className="size-4 shrink-0" aria-hidden="true" />
+                      <span className="whitespace-nowrap">{t(tab.labelKey)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </nav>
 
         {/* Semi-transparente + blur: um bg opaco aqui tapava o fundo
             estilizado (partículas/blobs) do layout pai em quase todo
             o ecrã de Configurações. */}
-        <section className="min-w-0 flex-1 rounded-xl border border-zinc-700/50 bg-zinc-950/50 p-6 backdrop-blur-sm">
+        <section className="min-w-0 flex-1 rounded-xl border border-zinc-700/50 bg-zinc-950/50 p-4 backdrop-blur-sm md:p-8">
           <div className={activeTab === "perfil" ? undefined : "hidden"}>
             <ProfilePanel />
           </div>
@@ -590,11 +594,12 @@ function DataPanel() {
     //    Se falhar, lança e a sessão é mantida para poder tentar de novo.
     await deleteAllUserData(user.$id);
 
-    // 2) Encerra a sessão atual e volta ao Login (mesmo se a sessão já tiver expirado).
+    // 2) Encerra a sessão atual e limpa cache local (mesmo se a sessão já tiver expirado).
     try {
-      await account.deleteSession("current");
+      await signOutCurrentSession();
     } catch (error) {
       console.error("Falha ao encerrar a sessão após apagar a conta:", error);
+      clearAppSessionArtifacts();
     }
 
     toast.success(t("settings.accountDeleted"));

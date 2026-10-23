@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader onOpenMenu={() => setMenuOpen(true)} />
         <AiCommandBar />
-        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4 pb-28 md:px-8 md:pt-8 lg:px-10 lg:pt-10">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4 pb-28 md:px-8 md:pt-8 md:pb-8 lg:px-10 lg:pt-10">
           {children}
         </div>
       </div>

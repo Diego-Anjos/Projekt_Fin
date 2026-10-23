@@ -12,6 +12,8 @@ export interface Transaction {
   category: string;
   amount: number;
   status: "Paid" | "Pending";
+  installmentNumber?: number | null;
+  totalInstallments?: number | null;
 }
 
 export interface Subscription {

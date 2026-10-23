@@ -13,14 +13,16 @@
     "mainMenu": "Menú principal",
     "active": "Activo",
     "dailyTip": "Consejo del día:",
-    "dailyTipText": "Consolida tus suscripciones para ahorrar dinero este mes."
+    "dailyTipText": "Consolida tus suscripciones para ahorrar dinero este mes.",
+    "dailyTipLoading": "Analizando tus datos..."
   },
   "header": {
     "search": "Buscar...",
     "header": "Encabezado",
     "openMenu": "Abrir menú",
     "showBalances": "Mostrar saldos",
-    "hideBalances": "Ocultar saldos"
+    "hideBalances": "Ocultar saldos",
+    "selectLanguage": "Seleccionar idioma"
   },
   "dashboard": {
     "title": "Panel",
@@ -366,6 +368,20 @@
     "income": "Ingreso / Receta",
     "expense": "Gasto / Despesa",
     "amount": "Importe ({symbol})",
+    "amountTotal": "Importe total ({symbol})",
+    "amountInstallment": "Importe de la cuota ({symbol})",
+    "amountHint": "Importe de esta transacción.",
+    "amountTotalHint": "Introduce el importe total. Se dividirá entre las cuotas.",
+    "amountInstallmentHint": "Importe solo de esta cuota. Las demás cuotas del grupo no cambian.",
+    "installmentToggle": "¿Compra a plazos?",
+    "installmentCount": "Cantidad de cuotas",
+    "installmentCountHint": "Mínimo 2. La primera cuota usa la fecha y el estado elegidos; las siguientes quedan pendientes, una por mes.",
+    "installmentCountError": "Indica entre 2 y 60 cuotas.",
+    "installmentAmountError": "El importe total es demasiado bajo para tantas cuotas.",
+    "installmentPreview": "Cada cuota: {amount}. {count} movimientos, uno por mes.",
+    "installmentPreviewAdjusted": "Cuotas de {amount} y la última de {last}, para que la suma cierre el total. {count} movimientos, uno por mes.",
+    "installmentEditNote": "Cuota {current} de {total}. Para anticiparla, cambia el estado a Pagado y la fecha a hoy. Solo se actualiza este movimiento.",
+    "installmentsCreated": "¡{count} cuotas guardadas con éxito!",
     "date": "Fecha de la Transacción",
     "description": "Descripción",
     "descriptionPlaceholder": "Compra de la semana",

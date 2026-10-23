@@ -1,17 +1,33 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { ID } from "appwrite";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { AmbientBackground } from "@/components/AmbientBackground";
 import { account } from "@/lib/appwrite/client";
+import {
+  clearAppSessionArtifacts,
+  getValidAccount,
+  markAppSession,
+} from "@/lib/appwrite/session";
+import {
+  loginFormSchema,
+  registerFormSchema,
+  type LoginFormValues,
+  type RegisterFormValues,
+} from "@/lib/validation/auth";
 
 const Logo3D = dynamic(() => import("@/components/Logo3D"), { ssr: false });
 
 const fieldClassName =
   "w-full rounded-lg border border-white/10 bg-[#050f0c] px-4 py-3 text-sm text-white outline-none transition duration-200 placeholder:text-white/30 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/40";
+
+const fieldErrorClassName =
+  "w-full rounded-lg border border-red-500/60 bg-[#050f0c] px-4 py-3 text-sm text-white outline-none transition duration-200 placeholder:text-white/30 focus:border-red-400 focus:ring-2 focus:ring-red-500/30";
 
 function GoogleIcon() {
   return (
@@ -36,28 +52,170 @@ function GoogleIcon() {
   );
 }
 
+type AuthFormValues = LoginFormValues & Partial<Pick<RegisterFormValues, "name">>;
+
+type AuthFormProps = {
+  isSignUp: boolean;
+  loading: boolean;
+  error: string;
+  onToggleMode: () => void;
+  onSubmit: (values: AuthFormValues) => Promise<void>;
+};
+
+function AuthForm({ isSignUp, loading, error, onToggleMode, onSubmit }: AuthFormProps) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<AuthFormValues>({
+    resolver: zodResolver(isSignUp ? registerFormSchema : loginFormSchema),
+    mode: "onBlur",
+    reValidateMode: "onChange",
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      remember: false,
+    },
+  });
+
+  return (
+    <>
+      <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {isSignUp && (
+          <label className="block space-y-2">
+            <span className="text-sm text-slate-300">Name</span>
+            <input
+              type="text"
+              autoComplete="name"
+              placeholder="Your full name"
+              aria-invalid={errors.name ? true : undefined}
+              className={errors.name ? fieldErrorClassName : fieldClassName}
+              {...register("name")}
+            />
+            {errors.name ? (
+              <span className="block text-sm text-red-400" role="alert">
+                {errors.name.message}
+              </span>
+            ) : null}
+          </label>
+        )}
+
+        <label className="block space-y-2">
+          <span className="text-sm text-slate-300">Email</span>
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-invalid={errors.email ? true : undefined}
+            className={errors.email ? fieldErrorClassName : fieldClassName}
+            {...register("email")}
+          />
+          {errors.email ? (
+            <span className="block text-sm text-red-400" role="alert">
+              {errors.email.message}
+            </span>
+          ) : null}
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm text-slate-300">Password</span>
+          <input
+            type="password"
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            placeholder="••••••••"
+            aria-invalid={errors.password ? true : undefined}
+            className={errors.password ? fieldErrorClassName : fieldClassName}
+            {...register("password")}
+          />
+          {errors.password ? (
+            <span className="block text-sm text-red-400" role="alert">
+              {errors.password.message}
+            </span>
+          ) : null}
+        </label>
+
+        {!isSignUp && (
+          <div className="flex items-center justify-between gap-4">
+            <label className="inline-flex cursor-pointer items-center gap-3">
+              <span className="relative inline-flex">
+                <input type="checkbox" className="peer sr-only" {...register("remember")} />
+                <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
+                <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
+              </span>
+              <span className="text-sm text-slate-300">Remember me</span>
+            </label>
+
+            <a
+              href="#esqueci-senha"
+              className="text-sm text-emerald-400 transition hover:text-emerald-300"
+            >
+              Forgot password?
+            </a>
+          </div>
+        )}
+
+        {error ? <p className="mb-4 text-center text-sm text-red-500">{error}</p> : null}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {loading ? "Processing..." : isSignUp ? "Sign up" : "Sign in"}
+        </button>
+      </form>
+
+      <div className="my-8 flex items-center gap-3">
+        <div className="h-px flex-1 bg-slate-800" />
+        <span className="text-xs tracking-[0.18em] text-slate-500">OR</span>
+        <div className="h-px flex-1 bg-slate-800" />
+      </div>
+
+      <button
+        type="button"
+        className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+      >
+        <GoogleIcon />
+        Continue with Google
+      </button>
+
+      <p className="mt-8 text-center text-sm text-slate-400">
+        {isSignUp ? "Already have an account? " : "Don't have an account? "}
+        <button
+          type="button"
+          onClick={onToggleMode}
+          className="cursor-pointer font-medium text-emerald-400 transition hover:text-emerald-300"
+        >
+          {isSignUp ? "Sign in" : "Sign up"}
+        </button>
+      </p>
+    </>
+  );
+}
+
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
 
     async function checkSession() {
-      try {
-        await account.get();
-        if (active) {
-          router.push("/dashboard");
-        }
-      } catch {
-        // Utilizador não está logado, permanece na página
+      const user = await getValidAccount();
+      if (!active) return;
+
+      if (user) {
+        await markAppSession();
+        router.replace("/dashboard");
+        return;
       }
+
+      clearAppSessionArtifacts();
+      setCheckingSession(false);
     }
 
     void checkSession();
@@ -67,31 +225,64 @@ export default function LoginPage() {
     };
   }, [router]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onValidSubmit(values: AuthFormValues) {
     setError("");
     setLoading(true);
 
     try {
       if (isSignUp) {
-        await account.create(ID.unique(), email, password, name);
-        await account.createEmailPasswordSession(email, password);
+        await account.create(
+          ID.unique(),
+          values.email,
+          values.password,
+          values.name?.trim() ?? "",
+        );
+        await account.createEmailPasswordSession(values.email, values.password);
       } else {
-        await account.createEmailPasswordSession(email, password);
+        await account.createEmailPasswordSession(values.email, values.password);
       }
 
-      router.push("/dashboard");
+      const user = await getValidAccount();
+      if (!user) {
+        clearAppSessionArtifacts();
+        setError("Não foi possível validar a sessão. Tente novamente.");
+        return;
+      }
+
+      await markAppSession();
+      router.replace("/dashboard");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "";
 
-      if (message.includes("session is active")) {
-        router.push("/dashboard");
+      if (message.toLowerCase().includes("session is active")) {
+        const existing = await getValidAccount();
+        if (existing) {
+          await markAppSession();
+          router.replace("/dashboard");
+          return;
+        }
+        clearAppSessionArtifacts();
+        setError("Sessão inválida no browser. Tente entrar novamente.");
       } else {
         setError(message || "Invalid credentials. Please check the email and password.");
       }
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="flex h-screen w-full items-center justify-center bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <span
+            className="size-10 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-400"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-slate-400">A verificar sessão...</p>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -116,140 +307,40 @@ export default function LoginPage() {
         <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_8%,#000000_72%)] opacity-90" />
 
         <div className="relative z-10 flex h-full w-full justify-center overflow-y-auto px-6">
-        <div className="relative z-10 my-auto w-full max-w-md py-10">
-          <div className="mb-10 flex w-full justify-center">
-            <Image
-              src="/Logotipo Projekt Fin em fundo transparente.png"
-              alt="Logotipo Projekt Fin"
-              width={220}
-              height={110}
-              priority
-              className="object-contain"
-            />
-          </div>
-          <div className="mb-10 flex w-full flex-col items-center text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-white">
-              {isSignUp ? "Create an account" : "Welcome to Projekt Fin"}
-            </h1>
-            <p className="mt-2 text-slate-400">
-              {isSignUp
-                ? "Start managing your finances today."
-                : "Track your expenses and take control of your money."}
-            </p>
-          </div>
-
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            {isSignUp && (
-              <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Name</span>
-                <input
-                  type="text"
-                  name="name"
-                  autoComplete="name"
-                  required
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Your full name"
-                  className={fieldClassName}
-                />
-              </label>
-            )}
-
-            <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Email</span>
-              <input
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                className={fieldClassName}
+          <div className="relative z-10 my-auto w-full max-w-md py-10">
+            <div className="mb-10 flex w-full justify-center">
+              <Image
+                src="/Logotipo Projekt Fin em fundo transparente.png"
+                alt="Logotipo Projekt Fin"
+                width={220}
+                height={110}
+                priority
+                className="object-contain"
               />
-            </label>
+            </div>
+            <div className="mb-10 flex w-full flex-col items-center text-center">
+              <h1 className="text-3xl font-bold tracking-tight text-white">
+                {isSignUp ? "Create an account" : "Welcome to Projekt Fin"}
+              </h1>
+              <p className="mt-2 text-slate-400">
+                {isSignUp
+                  ? "Start managing your finances today."
+                  : "Track your expenses and take control of your money."}
+              </p>
+            </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Password</span>
-              <input
-                type="password"
-                name="password"
-                autoComplete={isSignUp ? "new-password" : "current-password"}
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
-                className={fieldClassName}
-              />
-            </label>
-
-            {!isSignUp && (
-              <div className="flex items-center justify-between gap-4">
-                <label className="inline-flex cursor-pointer items-center gap-3">
-                  <span className="relative inline-flex">
-                    <input
-                      type="checkbox"
-                      name="remember"
-                      checked={remember}
-                      onChange={(event) => setRemember(event.target.checked)}
-                      className="peer sr-only"
-                    />
-                    <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
-                    <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
-                  </span>
-                  <span className="text-sm text-slate-300">Remember me</span>
-                </label>
-
-                <a
-                  href="#esqueci-senha"
-                  className="text-sm text-emerald-400 transition hover:text-emerald-300"
-                >
-                  Forgot password?
-                </a>
-              </div>
-            )}
-
-            {error && (
-              <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {loading ? "Processing..." : isSignUp ? "Sign up" : "Sign in"}
-            </button>
-          </form>
-
-          <div className="my-8 flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-800" />
-            <span className="text-xs tracking-[0.18em] text-slate-500">OR</span>
-            <div className="h-px flex-1 bg-slate-800" />
-          </div>
-
-          <button
-            type="button"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
-
-          <p className="mt-8 text-center text-sm text-slate-400">
-            {isSignUp ? "Already have an account? " : "Don't have an account? "}
-            <button
-              type="button"
-              onClick={() => {
+            <AuthForm
+              key={isSignUp ? "register" : "login"}
+              isSignUp={isSignUp}
+              loading={loading}
+              error={error}
+              onSubmit={onValidSubmit}
+              onToggleMode={() => {
                 setIsSignUp((current) => !current);
                 setError("");
               }}
-              className="cursor-pointer font-medium text-emerald-400 transition hover:text-emerald-300"
-            >
-              {isSignUp ? "Sign in" : "Sign up"}
-            </button>
-          </p>
-        </div>
+            />
+          </div>
         </div>
       </section>
     </main>

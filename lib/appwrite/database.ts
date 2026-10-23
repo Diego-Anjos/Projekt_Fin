@@ -1,13 +1,27 @@
 /**
+ * Parcelas na collection de transações (atributos opcionais):
+ * - groupId (String, tamanho 36, opcional) — liga as parcelas da mesma compra
+ * - installmentNumber (Integer, opcional) — número desta parcela (1, 2, 3…)
+ * - totalInstallments (Integer, opcional) — total de parcelas do grupo
+ * Sem estes atributos, uma compra parcelada falha ao gravar. Transações
+ * normais continuam a funcionar, porque os campos só são enviados quando existem.
+ */
+/**
  * Collection "Categories" no Database do Appwrite:
  * 1. Crie a collection com o nome Categories.
  * 2. Atributos: "name" (string, required) e "userId" (string, required).
  * 3. Index em "userId", para filtrar as categorias do utilizador autenticado.
- * 4. Permissões da collection: Users ou Any, com Create, Read, Update e Delete.
+ * 4. Document Security ON. Collection permissions: apenas Create para Users
+ *    (Role: users). DESATIVE permissões globais "Any" de Read/Update/Delete
+ *    na aba Settings — o isolamento é por documento (Permission.* Role.user).
  * 5. Copie o ID da collection para NEXT_PUBLIC_APPWRITE_CATEGORIES_COLLECTION_ID.
+ *
+ * O mesmo aplica-se a Transactions, Subscriptions, Goals e ChatSessions:
+ * Appwrite Console → Collection → Settings → Permissions → remover "Any".
  */
 import { ID, Permission, Query, Role, type Models } from "appwrite";
 import { appwriteCategoriesCollectionId, appwriteConfig, databases } from "@/lib/appwrite/client";
+import { addInstallmentMonths, splitInstallmentAmounts } from "@/lib/installments";
 
 export type TransactionDocument = Models.Document & {
   userId: string;
@@ -17,6 +31,10 @@ export type TransactionDocument = Models.Document & {
   date: string;
   amount: number;
   status: "Paid" | "Pending";
+  /** Liga as parcelas da mesma compra. Ausente em transações avulsas. */
+  groupId?: string | null;
+  installmentNumber?: number | null;
+  totalInstallments?: number | null;
 };
 
 export type SubscriptionDocument = Models.Document & {
@@ -169,10 +187,25 @@ function toTransactionPayload(data: TransactionInput) {
     date: data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
     amount: Number(data.amount),
     status: data.status,
+    ...(data.groupId ? { groupId: data.groupId } : {}),
+    ...(data.installmentNumber != null
+      ? { installmentNumber: Math.trunc(data.installmentNumber) }
+      : {}),
+    ...(data.totalInstallments != null
+      ? { totalInstallments: Math.trunc(data.totalInstallments) }
+      : {}),
   };
 }
 
 export async function createTransaction(data: TransactionInput) {
+  if (!data.userId) {
+    throw new Error("userId é obrigatório para criar uma transação.");
+  }
+  const amount = Number(data.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("O valor da transação deve ser um número positivo.");
+  }
+
   return databases.createDocument<TransactionDocument>(
     appwriteConfig.databaseId,
     appwriteConfig.transactionsCollectionId,
@@ -180,6 +213,48 @@ export async function createTransaction(data: TransactionInput) {
     toTransactionPayload(data),
     ownerPermissions(data.userId),
   );
+}
+
+/**
+ * Grava uma compra parcelada: um documento por mês, ligados pelo mesmo groupId.
+ * A primeira parcela usa o status escolhido; as seguintes ficam pendentes.
+ */
+export async function createInstallmentTransactions(data: TransactionInput, totalInstallments: number) {
+  if (!data.userId) {
+    throw new Error("userId é obrigatório para criar parcelas.");
+  }
+  const totalAmount = Number(data.amount);
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("O valor da compra parcelada deve ser um número positivo.");
+  }
+
+  const count = Math.trunc(totalInstallments);
+  const groupId = ID.unique();
+  const amounts = splitInstallmentAmounts(totalAmount, count);
+  const permissions = ownerPermissions(data.userId);
+  const creates: Promise<TransactionDocument>[] = [];
+
+  for (let installmentNumber = 1; installmentNumber <= count; installmentNumber += 1) {
+    creates.push(
+      databases.createDocument<TransactionDocument>(
+        appwriteConfig.databaseId,
+        appwriteConfig.transactionsCollectionId,
+        ID.unique(),
+        toTransactionPayload({
+          ...data,
+          amount: amounts[installmentNumber - 1] ?? 0,
+          date: addInstallmentMonths(data.date, installmentNumber - 1),
+          status: installmentNumber === 1 ? data.status : "Pending",
+          groupId,
+          installmentNumber,
+          totalInstallments: count,
+        }),
+        permissions,
+      ),
+    );
+  }
+
+  return Promise.all(creates);
 }
 
 export async function updateTransaction(documentId: string, data: TransactionInput) {
@@ -275,18 +350,12 @@ export async function createSubscription(data: SubscriptionInput) {
     console.log("3. Usando DatabaseID:", appwriteConfig.databaseId);
     console.log("4. Usando CollectionID (Subscriptions):", appwriteConfig.subscriptionsCollectionId);
 
-    const permissions = [
-      Permission.read(Role.user(data.userId)),
-      Permission.update(Role.user(data.userId)),
-      Permission.delete(Role.user(data.userId)),
-    ];
-
     const response = await databases.createDocument<SubscriptionDocument>(
       appwriteConfig.databaseId,
       appwriteConfig.subscriptionsCollectionId,
       ID.unique(),
       payload,
-      permissions,
+      ownerPermissions(data.userId),
     );
 
     console.log("✅ 5. Sucesso ao criar no Appwrite:", response);

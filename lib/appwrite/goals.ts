@@ -12,7 +12,8 @@
  *    - imageId (string, optional)
  *    - isCompleted (boolean, required)
  * 3. Index em "userId".
- * 4. Permissões: Create/Read/Update/Delete para Users.
+ * 4. Document Security ON. Collection: Create para Users.
+ *    Remova "Any" em Read/Update/Delete na aba Settings.
  * 5. Copie o ID para NEXT_PUBLIC_APPWRITE_GOALS_COLLECTION_ID.
  *
  * Bucket de imagens de metas:

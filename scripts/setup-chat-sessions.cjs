@@ -16,7 +16,11 @@ const client = new Client()
   .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID)
   .setKey(process.env.APPWRITE_API_KEY);
 const databases = new Databases(client);
-const COLLECTION_ID = "chatsessions";
+const COLLECTION_ID =
+  process.env.NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID ||
+  process.env.NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID ||
+  "chatsessions";
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitAvailable(kind, key) {

@@ -171,25 +171,40 @@ export function sixMonthSeries(
   return series;
 }
 
+/**
+ * Histórico: do mês atual até o mais antigo (sem meses futuros vazios).
+ * Projeção: só meses futuros que já tenham lançamentos (ex.: parcelas),
+ * listados no fim do seletor para não empurrarem 2027 para o topo.
+ */
 export function monthOptions(transactions: CashTransaction[], now = new Date()): MonthPoint[] {
   const current = { year: now.getFullYear(), month: now.getMonth() };
   let start = addMonths(current.year, current.month, -11);
-  let end = current;
   const floor = addMonths(current.year, current.month, -36);
+  const futureByKey = new Map<string, MonthPoint>();
 
   for (const transaction of transactions) {
     const point = readMonth(transaction.date);
     if (!point || compareMonths(point, floor) < 0) continue;
+
+    if (compareMonths(point, current) > 0) {
+      futureByKey.set(monthValue(point), point);
+      continue;
+    }
+
     if (compareMonths(point, start) < 0) start = point;
-    if (compareMonths(point, end) > 0) end = point;
   }
 
   const options: MonthPoint[] = [];
-  for (let cursor = end; compareMonths(cursor, start) >= 0; cursor = addMonths(cursor.year, cursor.month, -1)) {
+  for (
+    let cursor = current;
+    compareMonths(cursor, start) >= 0;
+    cursor = addMonths(cursor.year, cursor.month, -1)
+  ) {
     options.push(cursor);
   }
 
-  return options;
+  const futureMonths = [...futureByKey.values()].sort(compareMonths);
+  return [...options, ...futureMonths];
 }
 
 export const SUBSCRIPTIONS_CATEGORY = "Assinaturas";

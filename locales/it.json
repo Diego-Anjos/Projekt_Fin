@@ -13,14 +13,16 @@
     "mainMenu": "Menu principale",
     "active": "Attivo",
     "dailyTip": "Consiglio del giorno:",
-    "dailyTipText": "Consolida i tuoi abbonamenti per risparmiare denaro questo mese."
+    "dailyTipText": "Consolida i tuoi abbonamenti per risparmiare denaro questo mese.",
+    "dailyTipLoading": "Analisi dei tuoi dati..."
   },
   "header": {
     "search": "Cerca...",
     "header": "Intestazione",
     "openMenu": "Apri menu",
     "showBalances": "Mostra saldi",
-    "hideBalances": "Nascondi saldi"
+    "hideBalances": "Nascondi saldi",
+    "selectLanguage": "Seleziona lingua"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -366,6 +368,20 @@
     "income": "Entrata / Ricavo",
     "expense": "Uscita / Spesa",
     "amount": "Importo ({symbol})",
+    "amountTotal": "Importo totale ({symbol})",
+    "amountInstallment": "Importo della rata ({symbol})",
+    "amountHint": "Importo di questa transazione.",
+    "amountTotalHint": "Inserisci l'importo totale. Verrà diviso per il numero di rate.",
+    "amountInstallmentHint": "Importo solo di questa rata. Le altre rate del gruppo restano invariate.",
+    "installmentToggle": "Acquisto rateale?",
+    "installmentCount": "Numero di rate",
+    "installmentCountHint": "Minimo 2. La prima rata usa la data e lo stato scelti; le successive restano in sospeso, una al mese.",
+    "installmentCountError": "Indica tra 2 e 60 rate.",
+    "installmentAmountError": "L'importo totale è troppo basso per così tante rate.",
+    "installmentPreview": "Ogni rata: {amount}. {count} movimenti, uno al mese.",
+    "installmentPreviewAdjusted": "Rate di {amount} e l'ultima di {last}, così la somma chiude il totale. {count} movimenti, uno al mese.",
+    "installmentEditNote": "Rata {current} di {total}. Per anticiparla, imposta lo stato su Pagato e la data su oggi. Si aggiorna solo questo movimento.",
+    "installmentsCreated": "{count} rate salvate con successo!",
     "date": "Data della Transazione",
     "description": "Descrizione",
     "descriptionPlaceholder": "Spesa della settimana",

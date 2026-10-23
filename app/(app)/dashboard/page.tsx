@@ -13,12 +13,19 @@ import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import {
+  getAllTransactions,
   getSubscriptions,
-  getTransactions,
   type SubscriptionDocument,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
+import {
+  isCurrentMonthTransaction,
+  isFuturePendingTransaction,
+  isOnOrBeforeCurrentMonthEnd,
+} from "@/lib/transaction-timing";
 import type { DashboardKpis, Subscription, Transaction } from "@/types/dashboard";
+
+const RECENT_TRANSACTION_LIMIT = 10;
 
 function formatDashboardDate(value: string, bcp47: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -41,6 +48,8 @@ function toDashboardTransaction(document: TransactionDocument, bcp47: string): T
     category: document.category,
     amount: document.amount,
     status: document.status === "Paid" ? "Paid" : "Pending",
+    installmentNumber: document.installmentNumber,
+    totalInstallments: document.totalInstallments,
   };
 }
 
@@ -58,30 +67,49 @@ function toDashboardSubscription(
   };
 }
 
-function computeCashKpis(documents: TransactionDocument[]) {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-  let totalWealth = 0;
+/**
+ * KPIs do Market Hub:
+ * - mês atual: só lançamentos com o mesmo mês/ano de hoje
+ * - património: tudo até ao fim do mês atual; ignora Pending de meses futuros
+ */
+function computeCashKpis(documents: TransactionDocument[], now = new Date()) {
+  const currentMonthTransactions = documents.filter((document) =>
+    isCurrentMonthTransaction(document.date, now),
+  );
+
   let monthlyCashFlow = 0;
   let monthlyExpenses = 0;
 
-  for (const document of documents) {
-    const amount = Number(document.amount);
+  for (const document of currentMonthTransactions) {
+    const amount = Number(document.amount) || 0;
     const signed = document.type === "income" ? amount : -amount;
-    totalWealth += signed;
-
-    const match = /^(\d{4})-(\d{2})/.exec(document.date);
-    const documentYear = match ? Number(match[1]) : new Date(document.date).getFullYear();
-    const documentMonth = match ? Number(match[2]) - 1 : new Date(document.date).getMonth();
-
-    if (documentYear !== currentYear || documentMonth !== currentMonth) continue;
-
     monthlyCashFlow += signed;
     if (document.type === "expense") monthlyExpenses += amount;
   }
 
+  let totalWealth = 0;
+
+  for (const document of documents) {
+    if (isFuturePendingTransaction(document.date, document.status, now)) continue;
+
+    const amount = Number(document.amount) || 0;
+    totalWealth += document.type === "income" ? amount : -amount;
+  }
+
   return { totalWealth, monthlyCashFlow, monthlyExpenses };
+}
+
+function recentDashboardTransactions(
+  documents: TransactionDocument[],
+  bcp47: string,
+  now = new Date(),
+  limit = RECENT_TRANSACTION_LIMIT,
+) {
+  // getAllTransactions já vem orderDesc("date"); filtramos o futuro e ficamos com as 10 mais recentes "atuais".
+  return documents
+    .filter((document) => isOnOrBeforeCurrentMonthEnd(document.date, now))
+    .slice(0, limit)
+    .map((document) => toDashboardTransaction(document, bcp47));
 }
 
 export default function Home() {
@@ -104,18 +132,16 @@ export default function Home() {
 
     async function loadFinance() {
       try {
-        const [transactionsResponse, subscriptionsResponse] = await Promise.all([
-          getTransactions(user.$id, 100),
+        const [transactionDocuments, subscriptionsResponse] = await Promise.all([
+          getAllTransactions(user.$id),
           getSubscriptions(user.$id, 100),
         ]);
 
         if (!active) return;
 
-        setTransactions(
-          transactionsResponse.documents
-            .slice(0, 10)
-            .map((document) => toDashboardTransaction(document, bcp47)),
-        );
+        const now = new Date();
+
+        setTransactions(recentDashboardTransactions(transactionDocuments, bcp47, now));
         setSubscriptions(
           subscriptionsResponse.documents.map((document) =>
             toDashboardSubscription(document, bcp47, (date) => t("dashboard.renews", { date })),
@@ -123,7 +149,7 @@ export default function Home() {
         );
         setKpis((current) => ({
           ...current,
-          ...computeCashKpis(transactionsResponse.documents),
+          ...computeCashKpis(transactionDocuments, now),
         }));
       } catch (error) {
         console.error("Falha ao carregar dados do Appwrite.", error);
@@ -160,4 +186,3 @@ export default function Home() {
     </div>
   );
 }
-

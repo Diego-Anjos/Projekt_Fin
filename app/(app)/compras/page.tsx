@@ -14,6 +14,7 @@ import {
 } from "@/lib/appwrite/database";
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
+import { formatInstallmentDescription } from "@/lib/installments";
 import { formatCurrency } from "@/lib/utils";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -33,6 +34,9 @@ function toPurchaseTransaction(document: TransactionDocument): PurchaseTransacti
     date: document.date,
     amount: Number(document.amount),
     status: document.status === "Pending" ? "Pending" : "Paid",
+    groupId: document.groupId,
+    installmentNumber: document.installmentNumber,
+    totalInstallments: document.totalInstallments,
   };
 }
 
@@ -111,8 +115,14 @@ export default function ComprasPage() {
           const filtered = documents
             .map(toPurchaseTransaction)
             .filter((item) => {
+              const descriptionLabel = formatInstallmentDescription(
+                item.description,
+                item.installmentNumber,
+                item.totalInstallments,
+              );
               const matchesSearch =
                 item.description.toLowerCase().includes(query) ||
+                descriptionLabel.toLowerCase().includes(query) ||
                 item.category.toLowerCase().includes(query);
               const matchesMonth = month === "all" || item.date.startsWith(month);
               const matchesStatus = status === "all" || item.status === status;
@@ -355,7 +365,14 @@ export default function ComprasPage() {
                   </td>
                 </tr>
               ) : (
-                transactions.map((transaction) => (
+                transactions.map((transaction) => {
+                  const descriptionLabel = formatInstallmentDescription(
+                    transaction.description,
+                    transaction.installmentNumber,
+                    transaction.totalInstallments,
+                  );
+
+                  return (
                   <tr
                     key={transaction.id}
                     className="border-b border-zinc-800 transition-colors duration-200 last:border-b-0 hover:bg-zinc-800/40"
@@ -371,7 +388,9 @@ export default function ComprasPage() {
                         {statusLabel[transaction.status]}
                       </span>
                     </td>
-                    <td className="max-w-0 truncate px-3 py-3 font-medium text-zinc-100 md:px-5 md:py-4">{transaction.description}</td>
+                    <td className="max-w-0 truncate px-3 py-3 font-medium text-zinc-100 md:px-5 md:py-4" title={descriptionLabel}>
+                      {descriptionLabel}
+                    </td>
                     <td className="hidden max-w-0 truncate px-3 py-3 text-zinc-300 sm:table-cell md:px-5 md:py-4">{transaction.category}</td>
                     <td className="hidden px-3 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-5 md:py-4">{formatDate(transaction.date, bcp47)}</td>
                     <td
@@ -392,7 +411,7 @@ export default function ComprasPage() {
                         <button
                           type="button"
                           onClick={() => openEditModal(transaction)}
-                          aria-label={t("transactions.editAria", { description: transaction.description })}
+                          aria-label={t("transactions.editAria", { description: descriptionLabel })}
                           className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-zinc-800 hover:text-zinc-100"
                         >
                           <Pencil className="size-4" aria-hidden="true" />
@@ -401,7 +420,7 @@ export default function ComprasPage() {
                           type="button"
                           onClick={() => handleDelete(transaction)}
                           disabled={deletingId === transaction.id}
-                          aria-label={t("transactions.deleteAria", { description: transaction.description })}
+                          aria-label={t("transactions.deleteAria", { description: descriptionLabel })}
                           className="rounded-lg p-2 text-zinc-400 transition-colors duration-200 hover:bg-red-950 hover:text-red-400 disabled:opacity-50"
                         >
                           <Trash2 className="size-4" aria-hidden="true" />
@@ -409,7 +428,8 @@ export default function ComprasPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

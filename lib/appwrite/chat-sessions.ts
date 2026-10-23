@@ -1,14 +1,13 @@
 /**
  * Collection "ChatSessions" (histórico da Quantum.IA) no Appwrite:
- * 1. Crie a collection com ID `chatsessions` (ou defina
- *    NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID com o ID criado).
+ * 1. Defina NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID com o Collection ID
+ *    exacto da consola Appwrite (não o nome da collection).
  * 2. Atributos: userId (string 255, required), title (string 255, required),
  *    messages (string 1_000_000, required — JSON stringified),
  *    createdAt (datetime, required). Índice key em `userId`.
- * 3. Permissões da collection: Users com Create/Read/Update/Delete e
- *    Document Security ativa (cada documento só é do dono).
- *    Automático: `node scripts/setup-chat-sessions.cjs` (requer uma API key
- *    com scope `collections.write`; sem esse scope, crie na consola).
+ * 3. Document Security ON. Collection: Create para Users apenas.
+ *    Remova permissões "Any" (Read/Update/Delete) na aba Settings —
+ *    cada documento usa Permission.read/update/delete(Role.user(userId)).
  */
 import { ID, Permission, Query, Role, type Models } from "appwrite";
 import { appwriteConfig, databases } from "@/lib/appwrite/client";
@@ -28,13 +27,24 @@ export type ChatSessionDocument = Models.Document & {
   createdAt: string;
 };
 
-function chatSessionsCollectionId() {
-  if (!appwriteConfig.chatSessionsCollectionId) {
+function databaseId() {
+  if (!appwriteConfig.databaseId) {
     throw new Error(
-      "Defina NEXT_PUBLIC_APPWRITE_CHAT_SESSIONS_COLLECTION_ID (collection ChatSessions).",
+      "Defina NEXT_PUBLIC_APPWRITE_DATABASE_ID (database do Appwrite).",
     );
   }
-  return appwriteConfig.chatSessionsCollectionId;
+  return appwriteConfig.databaseId;
+}
+
+/** ID dinâmico da collection — só via env (`appwriteConfig.chatCollectionId`). */
+function chatCollectionId() {
+  const id = appwriteConfig.chatCollectionId.trim();
+  if (!id) {
+    throw new Error(
+      "Defina NEXT_PUBLIC_APPWRITE_CHAT_COLLECTION_ID no .env.local com o Collection ID real da consola Appwrite.",
+    );
+  }
+  return id;
 }
 
 function ownerPermissions(userId: string) {
@@ -97,17 +107,45 @@ export async function generateChatTitle(
   }
 }
 
-export async function listChatSessions(userId: string, limit = 25) {
-  const response = await databases.listDocuments<ChatSessionDocument>(
-    appwriteConfig.databaseId,
-    chatSessionsCollectionId(),
-    [
-      Query.equal("userId", userId),
-      Query.orderDesc("$createdAt"),
-      Query.limit(limit),
-    ],
+export const CHAT_SESSIONS_UPDATED_EVENT = "chat-sessions-updated";
+
+/** Dispara após create/update bem-sucedido — a sidebar (ou outros listeners) refetch. */
+export function notifyChatSessionsUpdated(detail?: { sessionId?: string }) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(CHAT_SESSIONS_UPDATED_EVENT, { detail: detail ?? {} }),
   );
-  return response.documents;
+}
+
+/**
+ * Lista conversas recentes.
+ * Em sucesso devolve o array (pode ser vazio). Em falha devolve `null`
+ * para a UI NÃO sobrescrever estado otimista com lista vazia.
+ */
+export async function listChatSessions(
+  userId: string,
+  limit = 25,
+): Promise<ChatSessionDocument[] | null> {
+  try {
+    if (!userId || !databaseId()) return [];
+    // Sem orderDesc no servidor: evita exigir índice composto (equal + order).
+    // Ordenamos por $createdAt no cliente.
+    const response = await databases.listDocuments<ChatSessionDocument>(
+      databaseId(),
+      chatCollectionId(),
+      [Query.equal("userId", userId), Query.limit(limit)],
+    );
+    return [...response.documents].sort(
+      (a, b) =>
+        new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime(),
+    );
+  } catch (error) {
+    console.error(
+      "[chat-sessions] listChatSessions falhou (collection/DB/permissões/índice?).",
+      error,
+    );
+    return null;
+  }
 }
 
 export async function createChatSession(input: {
@@ -115,9 +153,17 @@ export async function createChatSession(input: {
   title: string;
   messages: StoredChatMessage[];
 }) {
+  const collectionId = chatCollectionId();
+  console.log("[chat-sessions] createDocument", {
+    databaseId: databaseId(),
+    collectionId,
+    userId: input.userId,
+    title: input.title.slice(0, 255),
+    messageCount: input.messages.length,
+  });
   return databases.createDocument<ChatSessionDocument>(
-    appwriteConfig.databaseId,
-    chatSessionsCollectionId(),
+    databaseId(),
+    collectionId,
     ID.unique(),
     {
       userId: input.userId,
@@ -132,19 +178,31 @@ export async function createChatSession(input: {
 export async function updateChatSession(
   documentId: string,
   messages: StoredChatMessage[],
+  title?: string,
 ) {
-  return databases.updateDocument<ChatSessionDocument>(
-    appwriteConfig.databaseId,
-    chatSessionsCollectionId(),
+  const payload: { messages: string; title?: string } = {
+    messages: JSON.stringify(messages),
+  };
+  if (typeof title === "string" && title.trim()) {
+    payload.title = title.trim().slice(0, 255);
+  }
+  console.log("[chat-sessions] updateDocument", {
     documentId,
-    { messages: JSON.stringify(messages) },
+    messageCount: messages.length,
+    title: payload.title,
+  });
+  return databases.updateDocument<ChatSessionDocument>(
+    databaseId(),
+    chatCollectionId(),
+    documentId,
+    payload,
   );
 }
 
 export async function deleteChatSession(documentId: string) {
   return databases.deleteDocument(
-    appwriteConfig.databaseId,
-    chatSessionsCollectionId(),
+    databaseId(),
+    chatCollectionId(),
     documentId,
   );
 }

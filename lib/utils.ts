@@ -1,3 +1,8 @@
+/** Junta classNames Tailwind de forma condicional (falsy são ignorados). */
+export function cn(...inputs: Array<string | false | null | undefined>) {
+  return inputs.filter(Boolean).join(" ");
+}
+
 export function getCurrencyLocale(currency: string) {
   if (currency === "USD") return "en-US";
   if (currency === "EUR") return "de-DE";

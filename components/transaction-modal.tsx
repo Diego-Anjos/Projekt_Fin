@@ -1,15 +1,32 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useSession } from "@/components/require-session";
 import { CustomDatePicker, parseCalendarDate, toCalendarIso } from "@/components/ui/custom-date-picker";
 import { usePreferences } from "@/contexts/preferences-context";
 import { useTranslation } from "@/hooks/use-translation";
-import { createTransaction, getCategories, updateTransaction, type CategoryDocument } from "@/lib/appwrite/database";
+import {
+  createInstallmentTransactions,
+  createTransaction,
+  getCategories,
+  updateTransaction,
+  type CategoryDocument,
+} from "@/lib/appwrite/database";
 import { getCategoryIcon } from "@/lib/category-utils";
-import { formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
+import {
+  MAX_INSTALLMENTS,
+  MIN_INSTALLMENTS,
+  splitInstallmentAmounts,
+} from "@/lib/installments";
+import { formatCurrency, formatCurrencyInput, getCurrencySymbol, parseCurrencyToNumber } from "@/lib/utils";
+import {
+  transactionFormSchema,
+  type TransactionFormValues,
+} from "@/lib/validation/transaction";
 import { ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { createElement, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useForm } from "react-hook-form";
 
 export type TransactionType = "income" | "expense";
 export type TransactionStatus = "Paid" | "Pending";
@@ -22,6 +39,9 @@ export type PurchaseTransaction = {
   date: string;
   amount: number;
   status: TransactionStatus;
+  groupId?: string | null;
+  installmentNumber?: number | null;
+  totalInstallments?: number | null;
 };
 
 function CategoryGlyph({ name, className }: { name: string; className?: string }) {
@@ -94,9 +114,23 @@ function TransactionModalForm({
     transaction ? parseCalendarDate(transaction.date) : null,
   );
   const [status, setStatus] = useState<TransactionStatus>(transaction?.status ?? "Paid");
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentCount, setInstallmentCount] = useState(String(MIN_INSTALLMENTS));
   const [amountError, setAmountError] = useState("");
+  const [installmentError, setInstallmentError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const editingInstallment = (transaction?.totalInstallments ?? 0) > 1;
+  const parsedInstallmentCount = Number(installmentCount);
+  const parsedPreviewAmount = parseCurrencyToNumber(amount);
+  const previewAmounts =
+    isInstallment &&
+    Number.isInteger(parsedInstallmentCount) &&
+    parsedInstallmentCount >= MIN_INSTALLMENTS &&
+    parsedInstallmentCount <= MAX_INSTALLMENTS &&
+    parsedPreviewAmount > 0
+      ? splitInstallmentAmounts(parsedPreviewAmount, parsedInstallmentCount)
+      : [];
   const { user } = useSession();
   const categoriesUnavailable = !categoriesLoading && categoryOptions.length === 0;
   const categoryNames = categoryOptions.map((item) => item.name);
@@ -104,6 +138,22 @@ function TransactionModalForm({
     category && !categoryNames.some((name) => name.localeCompare(category, "pt-BR", { sensitivity: "accent" }) === 0)
       ? [category, ...categoryNames]
       : categoryNames;
+
+  /** RHF + Zod: validação canónica no submit (UI controlada mantém formatadores de moeda). */
+  const { setError: setFormError, clearErrors: clearFormErrors } = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionFormSchema),
+    defaultValues: {
+      type: transaction?.type ?? "expense",
+      description: transaction?.description ?? "",
+      category: transaction?.category ?? "",
+      date: transaction ? (parseCalendarDate(transaction.date) ?? new Date()) : new Date(),
+      amount: transaction?.amount && transaction.amount > 0 ? transaction.amount : 0.01,
+      status: transaction?.status ?? "Paid",
+      isInstallment: false,
+      installmentCount: MIN_INSTALLMENTS,
+    },
+    mode: "onSubmit",
+  });
 
   useEffect(() => {
     setAmount((current) => (current ? formatCurrencyInput(current, currency) : current));
@@ -177,54 +227,51 @@ function TransactionModalForm({
     form.requestSubmit();
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const errors = collectValidationErrors(event.currentTarget, t("transactionModal.invalidField"));
-    const parsedAmount = parseCurrencyToNumber(amount);
-
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = t("transactionModal.amountError");
-    }
-
-    if (!date) {
-      errors.date = t("transactionModal.dateError");
-    }
-
-    if (!category) {
-      errors.category = t("transactionModal.categoryError");
-    }
-
-    if (Object.keys(errors).length > 0 || !date) {
-      setAmountError(errors.amount ?? "");
-      setSubmitError(Object.values(errors).join(" "));
-      return;
-    }
-
-    setAmountError("");
-
+  async function persistTransaction(values: TransactionFormValues) {
     if (!user?.$id) {
       setSubmitError(t("transactionModal.sessionMissing"));
       return;
     }
 
+    const installmentAmounts =
+      !transaction && values.isInstallment
+        ? splitInstallmentAmounts(values.amount, values.installmentCount ?? 0)
+        : [];
+
+    if (
+      !transaction &&
+      values.isInstallment &&
+      installmentAmounts.some((value) => value <= 0)
+    ) {
+      setInstallmentError(t("transactionModal.installmentAmountError"));
+      setSubmitError(t("transactionModal.installmentAmountError"));
+      return;
+    }
+
     const dataToSend = {
       userId: user.$id,
-      type,
-      description: description.trim(),
-      category,
-      date: toCalendarIso(date),
-      amount: parsedAmount,
-      status,
+      type: values.type,
+      description: values.description,
+      category: values.category,
+      date: toCalendarIso(values.date),
+      amount: values.amount,
+      status: values.status,
     };
 
     try {
       setIsSubmitting(true);
       setSubmitError("");
 
+      const count = values.installmentCount ?? parsedInstallmentCount;
       const response = transaction
         ? await updateTransaction(transaction.id, dataToSend)
-        : await createTransaction(dataToSend);
+        : values.isInstallment
+          ? (await createInstallmentTransactions(dataToSend, count))[0]
+          : await createTransaction(dataToSend);
+
+      if (!response) {
+        throw new Error(t("transactionModal.saveError"));
+      }
 
       onSave({
         id: response.$id,
@@ -234,8 +281,17 @@ function TransactionModalForm({
         category: response.category,
         date: response.date,
         status: response.status === "Pending" ? "Pending" : "Paid",
+        groupId: response.groupId ?? transaction?.groupId,
+        installmentNumber: response.installmentNumber ?? transaction?.installmentNumber,
+        totalInstallments: response.totalInstallments ?? transaction?.totalInstallments,
       });
-      toast.success(transaction ? t("transactionModal.updated") : t("transactionModal.created"));
+      toast.success(
+        transaction
+          ? t("transactionModal.updated")
+          : values.isInstallment
+            ? t("transactionModal.installmentsCreated", { count })
+            : t("transactionModal.created"),
+      );
       onClose();
     } catch (error) {
       console.error("Falha ao salvar a transação.", error);
@@ -245,6 +301,53 @@ function TransactionModalForm({
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearFormErrors();
+
+    const htmlErrors = collectValidationErrors(
+      event.currentTarget,
+      t("transactionModal.invalidField"),
+    );
+    const parsedAmount = parseCurrencyToNumber(amount);
+
+    const candidate: TransactionFormValues = {
+      type,
+      description: description.trim(),
+      category,
+      date: date ?? (undefined as unknown as Date),
+      amount: parsedAmount,
+      status,
+      isInstallment: Boolean(!transaction && isInstallment),
+      installmentCount: isInstallment ? parsedInstallmentCount : undefined,
+    };
+
+    const parsed = transactionFormSchema.safeParse(candidate);
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = { ...htmlErrors };
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] ?? "form");
+        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+        setFormError(key as keyof TransactionFormValues, { message: issue.message });
+      }
+      if (!date) fieldErrors.date = fieldErrors.date ?? t("transactionModal.dateError");
+      if (!category) fieldErrors.category = fieldErrors.category ?? t("transactionModal.categoryError");
+      if (!(parsedAmount > 0)) {
+        fieldErrors.amount = fieldErrors.amount ?? t("transactionModal.amountError");
+      }
+      setAmountError(fieldErrors.amount ?? "");
+      setInstallmentError(
+        fieldErrors.installmentCount ?? fieldErrors.isInstallment ?? fieldErrors.installments ?? "",
+      );
+      setSubmitError(Object.values(fieldErrors).filter(Boolean).join(" "));
+      return;
+    }
+
+    setAmountError("");
+    setInstallmentError("");
+    await persistTransaction(parsed.data);
   }
 
   return (
@@ -258,7 +361,7 @@ function TransactionModalForm({
         role="dialog"
         aria-modal="true"
         aria-labelledby="transaction-modal-title"
-        className="relative max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 md:p-8"
+        className="relative max-h-[90vh] w-full max-w-[95vw] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 sm:max-w-2xl md:max-w-3xl md:p-8"
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -289,7 +392,11 @@ function TransactionModalForm({
               <button
                 type="button"
                 aria-pressed={type === "income"}
-                onClick={() => setType("income")}
+                onClick={() => {
+                  setType("income");
+                  setIsInstallment(false);
+                  setInstallmentError("");
+                }}
                 className={
                   type === "income"
                     ? "rounded-xl border border-emerald-500 bg-emerald-500/15 px-4 py-4 text-sm font-semibold text-emerald-400 transition-colors duration-200"
@@ -313,35 +420,107 @@ function TransactionModalForm({
             </div>
           </fieldset>
 
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-300">
-              {t("transactionModal.amount", { symbol: getCurrencySymbol(currency) })}
-            </span>
-            <span className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 transition-colors duration-200 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
-              <span className="text-xl font-medium text-emerald-400 select-none">
-                {getCurrencySymbol(currency)}
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-zinc-300">
+                {isInstallment
+                  ? t("transactionModal.amountTotal", { symbol: getCurrencySymbol(currency) })
+                  : editingInstallment
+                    ? t("transactionModal.amountInstallment", { symbol: getCurrencySymbol(currency) })
+                    : t("transactionModal.amount", { symbol: getCurrencySymbol(currency) })}
               </span>
-              <input
-                type="text"
-                name="amount"
-                inputMode="numeric"
-                value={amount}
-                onChange={(event) => {
-                  const formatted = formatCurrencyInput(event.target.value, currency);
-                  event.target.value = formatted;
-                  const end = formatted.length;
-                  event.target.setSelectionRange(end, end);
-                  setAmount(formatted);
-                  setAmountError("");
-                }}
-                placeholder={currency === "USD" ? "0.00" : "0,00"}
-                required
-                aria-invalid={amountError ? true : undefined}
-                className="w-full bg-transparent text-4xl font-semibold tracking-tight text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-600"
-              />
-            </span>
-            {amountError ? <span className="text-sm text-red-400">{amountError}</span> : null}
-          </label>
+              <span className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 transition-colors duration-200 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
+                <span className="text-xl font-medium text-emerald-400 select-none">
+                  {getCurrencySymbol(currency)}
+                </span>
+                <input
+                  type="text"
+                  name="amount"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(event) => {
+                    const formatted = formatCurrencyInput(event.target.value, currency);
+                    event.target.value = formatted;
+                    const end = formatted.length;
+                    event.target.setSelectionRange(end, end);
+                    setAmount(formatted);
+                    setAmountError("");
+                  }}
+                  placeholder={currency === "USD" ? "0.00" : "0,00"}
+                  required
+                  aria-invalid={amountError ? true : undefined}
+                  className="w-full bg-transparent text-4xl font-semibold tracking-tight text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-600"
+                />
+              </span>
+              <span className="text-sm text-zinc-500">
+                {isInstallment
+                  ? t("transactionModal.amountTotalHint")
+                  : editingInstallment
+                    ? t("transactionModal.amountInstallmentHint")
+                    : t("transactionModal.amountHint")}
+              </span>
+              {amountError ? <span className="text-sm text-red-400">{amountError}</span> : null}
+            </label>
+
+            {!transaction && type === "expense" ? (
+              <div className="flex flex-col gap-4">
+                <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={isInstallment}
+                    onChange={(event) => {
+                      setIsInstallment(event.target.checked);
+                      setInstallmentError("");
+                    }}
+                    className="size-4 accent-emerald-500"
+                  />
+                  {t("transactionModal.installmentToggle")}
+                </label>
+
+                {isInstallment ? (
+                  <label className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-zinc-300">
+                      {t("transactionModal.installmentCount")}
+                    </span>
+                    <input
+                      type="number"
+                      name="installments"
+                      inputMode="numeric"
+                      min={MIN_INSTALLMENTS}
+                      max={MAX_INSTALLMENTS}
+                      step={1}
+                      value={installmentCount}
+                      onChange={(event) => {
+                        setInstallmentCount(event.target.value);
+                        setInstallmentError("");
+                      }}
+                      required
+                      aria-invalid={installmentError ? true : undefined}
+                      className={fieldClassName}
+                    />
+                    <span className="text-sm text-zinc-500">{t("transactionModal.installmentCountHint")}</span>
+                    {previewAmounts.length > 0 ? (
+                      <span className="text-sm text-emerald-400">
+                        {previewAmounts[0] === previewAmounts[previewAmounts.length - 1]
+                          ? t("transactionModal.installmentPreview", {
+                              amount: formatCurrency(previewAmounts[0], currency),
+                              count: previewAmounts.length,
+                            })
+                          : t("transactionModal.installmentPreviewAdjusted", {
+                              amount: formatCurrency(previewAmounts[0], currency),
+                              last: formatCurrency(previewAmounts[previewAmounts.length - 1], currency),
+                              count: previewAmounts.length,
+                            })}
+                      </span>
+                    ) : null}
+                    {installmentError ? (
+                      <span className="text-sm text-red-400">{installmentError}</span>
+                    ) : null}
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <label className="flex h-full flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">{t("transactionModal.date")}</span>
@@ -350,9 +529,17 @@ function TransactionModalForm({
               selected={date}
               onChange={setDate}
               required
-              className="mt-auto"
             />
           </label>
+
+          {editingInstallment ? (
+            <p className="col-span-1 rounded-xl border border-emerald-900/60 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300 md:col-span-2">
+              {t("transactionModal.installmentEditNote", {
+                current: transaction?.installmentNumber ?? 1,
+                total: transaction?.totalInstallments ?? 1,
+              })}
+            </p>
+          ) : null}
 
           <label className="flex flex-col gap-2">
             <span className="text-sm font-medium text-zinc-300">{t("transactionModal.description")}</span>
