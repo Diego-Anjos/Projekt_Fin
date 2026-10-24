@@ -682,11 +682,11 @@ export function AiCommandBar() {
           type="button"
           aria-label="Abrir Quantum.IA"
           onClick={() => setIsExpanded(true)}
-          className="relative flex h-14 w-14 items-center justify-center transition-transform hover:scale-105 md:h-16 md:w-16"
+          className="relative flex h-24 w-24 shrink-0 items-center justify-center transition-transform hover:scale-105 md:h-32 md:w-32"
         >
           <div
             aria-hidden="true"
-            className="absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-green-600/30 blur-md md:h-14 md:w-14"
+            className="absolute top-1/2 left-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#064E3B]/60 blur-xl md:h-24 md:w-24"
           />
           {iconFailed ? (
             <DollarSign className="relative z-10 h-8 w-8 text-green-500" aria-hidden="true" />
@@ -705,10 +705,10 @@ export function AiCommandBar() {
 
       {/* ESTADO ABERTO: Painel de mensagens + barra de input */}
       {isExpanded && (
-        <div className="flex w-[95vw] max-w-full flex-col gap-3 md:w-[600px] xl:w-[700px]">
+        <div className="flex w-[95vw] max-w-full flex-col gap-2 md:w-[600px] xl:w-[700px]">
           {/* PAINEL DE MENSAGENS (Histórico) — empilhado acima da barra, sem absolute */}
           {showChat ? (
-            <div className="pf-chat-rise flex max-h-[60vh] w-full flex-col overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#0a0f0d]/90 shadow-[0_0_15px_rgba(34,197,94,0.1)] backdrop-blur-xl">
+            <div className="pf-chat-rise flex max-h-[60vh] w-full flex-col overflow-hidden rounded-2xl border border-[#0F291E] bg-[#070C09]">
             <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden md:flex-row">
               <AnimatePresence initial={false}>
                 {showHistory ? (
@@ -718,7 +718,7 @@ export function AiCommandBar() {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2, ease: "easeInOut" }}
-                    className="absolute inset-0 z-20 flex w-full flex-col overflow-hidden border-emerald-500/20 bg-[#0a0f0d] md:relative md:inset-auto md:z-auto md:w-auto md:shrink-0 md:border-r md:bg-transparent"
+                    className="absolute inset-0 z-20 flex w-full flex-col overflow-hidden border-[#0F291E] bg-[#070C09] md:relative md:inset-auto md:z-auto md:w-auto md:shrink-0 md:border-r md:bg-transparent"
                   >
                     <div className="flex h-full w-full flex-col gap-3 p-4 md:w-56 lg:w-64">
                       <div className="flex items-center justify-between gap-2 md:block">
@@ -986,11 +986,11 @@ export function AiCommandBar() {
               type="button"
               aria-label="Recolher Quantum.IA"
               onClick={() => setIsExpanded(false)}
-              className="relative flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center md:h-16 md:w-16"
+              className="relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center md:h-32 md:w-32"
             >
               <div
                 aria-hidden="true"
-                className="absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-green-600/30 blur-md md:h-14 md:w-14"
+                className="absolute top-1/2 left-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#064E3B]/60 blur-xl md:h-24 md:w-24"
               />
               {iconFailed ? (
                 <DollarSign className="relative z-10 h-8 w-8 text-green-500" aria-hidden="true" />
@@ -1007,7 +1007,7 @@ export function AiCommandBar() {
             </button>
 
             {/* Input Field e Botões */}
-            <div className="relative flex h-12 flex-1 items-center rounded-full shadow-[0_0_15px_rgba(34,197,94,0.1)] md:h-14">
+            <div className="relative flex h-14 flex-1 items-center rounded-full md:h-16">
               <input
                 ref={inputRef}
                 value={query}
@@ -1019,7 +1019,7 @@ export function AiCommandBar() {
                 aria-label="Hackeie as suas finanças com a Quantum.IA"
                 disabled={isLoading}
                 placeholder="Hackeie as suas finanças com a Quantum.IA..."
-                className="h-full w-full rounded-full border border-green-900/50 bg-[#0B1410] pr-[88px] pl-5 text-white placeholder:text-gray-500 transition-colors focus:border-green-500 focus:outline-none"
+                className="h-full w-full rounded-full border border-[#0F291E] bg-[#070C09] pr-[88px] pl-5 text-white placeholder:text-gray-500 transition-colors focus:border-[#0F291E] focus:outline-none"
               />
 
               <div className="absolute right-2 flex items-center gap-2">
@@ -1039,7 +1039,7 @@ export function AiCommandBar() {
                     type="button"
                     aria-label="Parar geração"
                     onClick={stopGeneration}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-600 text-white transition-colors hover:bg-green-500"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-none bg-[#10B981] text-black transition-colors hover:bg-[#059669]"
                   >
                     <Square className="size-3.5 shrink-0 fill-current" aria-hidden="true" />
                   </button>
@@ -1047,7 +1047,7 @@ export function AiCommandBar() {
                   <button
                     type="submit"
                     aria-label="Enviar"
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-600 text-white transition-colors hover:bg-green-500"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-none bg-[#10B981] text-black transition-colors hover:bg-[#059669]"
                   >
                     <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
                   </button>
