@@ -15,7 +15,7 @@ import {
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatInstallmentDescription } from "@/lib/installments";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -252,7 +252,7 @@ export default function ComprasPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-4 md:gap-6">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-4 max-md:pb-28 md:gap-6">
       <header className="flex flex-col gap-4 rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
         <div className="flex items-center gap-6">
           <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-emerald-800/40 bg-emerald-500/10 text-emerald-400">
@@ -338,23 +338,29 @@ export default function ComprasPage() {
         </label>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-700/50 bg-black">
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-zinc-700/50 bg-black">
+        <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain scrollbar-hide">
+          <table className="w-full min-w-0 border-collapse text-left text-sm md:min-w-full">
             <thead>
               <tr className="border-b border-zinc-800 text-xs tracking-wide text-zinc-400 uppercase">
-                <th className="w-[22%] px-3 py-3 font-medium md:px-5 md:py-4">{t("transactions.situation")}</th>
-                <th className="w-[34%] px-3 py-3 font-medium md:px-5 md:py-4">{t("transactions.description")}</th>
-                <th className="hidden w-[16%] px-3 py-3 font-medium sm:table-cell md:px-5 md:py-4">{t("transactions.category")}</th>
-                <th className="hidden w-[14%] px-3 py-3 font-medium md:table-cell md:px-5 md:py-4">{t("transactions.date")}</th>
-                <th className="w-[24%] px-3 py-3 text-right font-medium md:px-5 md:py-4">{t("transactions.amount")}</th>
-                <th className="w-[20%] px-3 py-3 text-right font-medium md:px-5 md:py-4">{t("transactions.actions")}</th>
+                <th className="w-10 px-2 py-3 text-center font-medium md:w-auto md:px-4 md:py-4 md:text-left">
+                  <span className="sr-only md:not-sr-only">{t("transactions.situation")}</span>
+                </th>
+                <th className="px-2 py-3 font-medium md:px-4 md:py-4">{t("transactions.description")}</th>
+                <th className="hidden px-2 py-3 font-medium sm:table-cell md:px-4 md:py-4">{t("transactions.category")}</th>
+                <th className="hidden px-2 py-3 font-medium md:table-cell md:px-4 md:py-4">{t("transactions.date")}</th>
+                <th className="px-2 py-3 text-right font-medium md:px-4 md:py-4 md:text-left">
+                  {t("transactions.amount")}
+                </th>
+                <th className="w-1 whitespace-nowrap py-3 pl-2 pr-4 text-right font-medium md:pr-4 md:py-4">
+                  {t("transactions.actions")}
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-zinc-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-zinc-400">
                     {t("common.loading")}
                   </td>
                 </tr>
@@ -377,37 +383,59 @@ export default function ComprasPage() {
                     key={transaction.id}
                     className="border-b border-zinc-800 transition-colors duration-200 last:border-b-0 hover:bg-zinc-800/40"
                   >
-                    <td className="px-3 py-3 md:px-5 md:py-4">
+                    <td className="px-2 py-3 whitespace-nowrap md:px-4 md:py-4">
+                      {/* Desktop: badge com texto */}
                       <span
-                        className={
+                        className={cn(
+                          "hidden rounded-md border px-2.5 py-1 text-xs font-medium md:inline-flex",
                           transaction.status === "Paid"
-                            ? "inline-flex rounded-md border border-emerald-800 bg-emerald-950 px-2.5 py-1 text-xs font-medium text-emerald-300"
-                            : "inline-flex rounded-md border border-amber-800 bg-amber-950 px-2.5 py-1 text-xs font-medium text-amber-300"
-                        }
+                            ? "border-emerald-800 bg-emerald-950 text-emerald-300"
+                            : "border-amber-800 bg-amber-950 text-amber-300",
+                        )}
                       >
                         {statusLabel[transaction.status]}
                       </span>
+
+                      {/* Mobile: bolinha colorida */}
+                      <div className="flex w-full items-center justify-center md:hidden">
+                        <span
+                          title={statusLabel[transaction.status]}
+                          aria-label={statusLabel[transaction.status]}
+                          className={cn(
+                            "h-3 w-3 rounded-full shadow-sm",
+                            transaction.status === "Paid"
+                              ? "bg-green-500 shadow-green-500/50"
+                              : "bg-orange-500 shadow-orange-500/50",
+                          )}
+                        />
+                      </div>
                     </td>
-                    <td className="max-w-0 truncate px-3 py-3 font-medium text-zinc-100 md:px-5 md:py-4" title={descriptionLabel}>
-                      {descriptionLabel}
-                    </td>
-                    <td className="hidden max-w-0 truncate px-3 py-3 text-zinc-300 sm:table-cell md:px-5 md:py-4">{transaction.category}</td>
-                    <td className="hidden px-3 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-5 md:py-4">{formatDate(transaction.date, bcp47)}</td>
                     <td
-                      className={`px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums md:px-5 md:py-4 ${
+                      className="max-w-[90px] min-[400px]:max-w-[120px] truncate px-2 py-3 font-medium text-zinc-100 md:max-w-none md:px-4 md:py-4 md:whitespace-normal"
+                      title={descriptionLabel}
+                    >
+                      <span className="block truncate md:whitespace-normal">
+                        {descriptionLabel}
+                      </span>
+                    </td>
+                    <td className="hidden max-w-0 truncate px-2 py-3 text-zinc-300 sm:table-cell md:px-4 md:py-4">{transaction.category}</td>
+                    <td className="hidden px-2 py-3 whitespace-nowrap text-zinc-400 md:table-cell md:px-4 md:py-4">{formatDate(transaction.date, bcp47)}</td>
+                    <td
+                      className={cn(
+                        "px-2 py-3 text-right font-semibold whitespace-nowrap tabular-nums md:px-4 md:py-4 md:text-left",
                         privacyMode
                           ? "text-zinc-300"
                           : transaction.type === "income"
                             ? "text-emerald-400"
-                            : "text-red-400"
-                      }`}
+                            : "text-red-400",
+                      )}
                     >
                       {privacyMode
                         ? formatCurrency(transaction.amount, currency, true)
                         : `${transaction.type === "income" ? "+" : "−"} ${formatCurrency(transaction.amount, currency, false)}`}
                     </td>
-                    <td className="px-3 py-3 md:px-5 md:py-4">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="w-1 whitespace-nowrap py-3 pl-2 pr-4 md:pr-4">
+                      <div className="flex items-center justify-end gap-3 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => openEditModal(transaction)}

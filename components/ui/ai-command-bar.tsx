@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 
 type Emotion = "happy" | "warning" | "neutral" | "error" | "thinking";
 
@@ -185,6 +186,7 @@ export function AiCommandBar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   // Sessões persistidas (collection ChatSessions), $createdAt descendente.
   const [recentConversations, setRecentConversations] = useState<ChatSessionDocument[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
@@ -346,7 +348,10 @@ export function AiCommandBar() {
 
   // Ao abrir o histórico, força refetch (sem limpar se falhar).
   useEffect(() => {
-    if (!showHistory) return;
+    if (!showHistory) {
+      setChatToDelete(null);
+      return;
+    }
     void refreshChatSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showHistory, user.$id]);
@@ -465,15 +470,26 @@ export function AiCommandBar() {
     setIsChatVisible(false);
   }
 
-  function handleDeleteHistoryItem(id: string) {
+  async function handleDeleteHistoryItem(id: string) {
+    const title =
+      recentConversations.find((item) => item.$id === id)?.title ?? "conversa";
+
+    setChatToDelete(null);
     setRecentConversations((current) => current.filter((item) => item.$id !== id));
     if (sessionIdRef.current === id) {
       conversationEpochRef.current += 1;
       setActiveSessionId(null);
     }
-    void deleteChatSession(id).catch((error) => {
+
+    try {
+      await deleteChatSession(id);
+      notifyChatSessionsUpdated({ sessionId: id });
+      toast.success(`Conversa "${title}" apagada com sucesso!`);
+    } catch (error) {
       console.error("Falha ao apagar a sessão de chat:", error);
-    });
+      toast.error("Erro ao apagar. Tente novamente.");
+      void refreshChatSessions();
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -720,7 +736,7 @@ export function AiCommandBar() {
                     transition={{ duration: 0.2, ease: "easeInOut" }}
                     className="absolute inset-0 z-20 flex w-full shrink-0 flex-col overflow-hidden border-[#0F291E] bg-[#070C09] md:relative md:inset-auto md:z-auto md:w-[250px] lg:w-[300px] md:border-r md:bg-transparent"
                   >
-                    <div className="flex h-full w-full flex-col gap-3 p-4">
+                    <div className="relative flex h-full w-full flex-col gap-3 p-4">
                       <div className="flex items-center justify-between gap-2 md:block">
                         <p className="text-xs font-medium tracking-wide text-emerald-400/80 uppercase">
                           Conversas Recentes
@@ -728,7 +744,10 @@ export function AiCommandBar() {
                         <button
                           type="button"
                           aria-label="Fechar histórico"
-                          onClick={() => setShowHistory(false)}
+                          onClick={() => {
+                            setChatToDelete(null);
+                            setShowHistory(false);
+                          }}
                           className="flex size-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300 md:hidden"
                         >
                           <X className="size-4" aria-hidden="true" />
@@ -777,7 +796,7 @@ export function AiCommandBar() {
                                     type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      handleDeleteHistoryItem(item.$id);
+                                      setChatToDelete(item.$id);
                                     }}
                                     className="ml-2 flex shrink-0 rounded p-1 text-zinc-400 opacity-100 transition-all md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
                                     title="Apagar conversa"
@@ -791,6 +810,49 @@ export function AiCommandBar() {
                           })
                         )}
                       </ul>
+
+                      {chatToDelete ? (
+                        <div
+                          role="alertdialog"
+                          aria-modal="true"
+                          aria-labelledby="delete-chat-title"
+                          aria-describedby="delete-chat-desc"
+                          className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-black/80 p-4 backdrop-blur-sm"
+                        >
+                          <div className="w-full max-w-sm rounded-xl border border-green-500/30 bg-[#0B1410] p-5 text-center">
+                            <h3
+                              id="delete-chat-title"
+                              className="mb-2 font-semibold text-white"
+                            >
+                              Apagar conversa?
+                            </h3>
+                            <p
+                              id="delete-chat-desc"
+                              className="mb-6 text-sm text-gray-400"
+                            >
+                              Esta ação não pode ser desfeita.
+                            </p>
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setChatToDelete(null)}
+                                className="rounded-lg px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleDeleteHistoryItem(chatToDelete);
+                                }}
+                                className="rounded-lg border border-red-500/50 bg-red-500/20 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/30"
+                              >
+                                Sim, apagar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </motion.aside>
                 ) : null}

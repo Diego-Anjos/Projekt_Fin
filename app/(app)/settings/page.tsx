@@ -50,7 +50,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
 
   return (
-    <div className="flex w-full flex-col gap-4 md:gap-6">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-4 md:gap-6">
       <header className="rounded-2xl border border-emerald-950/80 bg-gradient-to-r from-[#041610] to-[#0a241a] px-4 py-5 md:px-6">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
           {t("settings.title")}
@@ -60,24 +60,24 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-        <nav aria-label={t("settings.navAria")} className="w-full shrink-0 md:w-[250px]">
+      <div className="flex min-w-0 flex-col gap-6 md:flex-row md:gap-8">
+        <nav aria-label={t("settings.navAria")} className="w-full min-w-0 md:w-[250px] md:shrink-0">
           {/* Mobile: scroll horizontal; desktop: coluna estática */}
-          <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide pb-2 md:overflow-visible md:whitespace-normal md:pb-0">
+          <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain pb-1 pr-4 scrollbar-hide md:overflow-visible md:pb-0 md:pr-0">
             <ul className="flex flex-row gap-1 md:w-full md:flex-col">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
 
                 return (
-                  <li key={tab.id} className="shrink-0 md:shrink md:w-full">
+                  <li key={tab.id} className="shrink-0 md:w-full">
                     <button
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
                       aria-current={isActive ? "page" : undefined}
                       className={
                         isActive
-                          ? "flex w-full items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2.5 text-left text-sm font-medium text-emerald-500 transition-colors duration-200 md:gap-3"
-                          : "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-zinc-400 transition-colors duration-200 hover:text-zinc-200 md:gap-3"
+                          ? "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-zinc-800/50 px-3 py-2.5 text-left text-sm font-medium text-emerald-500 transition-colors duration-200 md:w-full md:gap-3"
+                          : "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm font-medium text-zinc-400 transition-colors duration-200 hover:text-zinc-200 md:w-full md:gap-3"
                       }
                     >
                       <tab.icon className="size-4 shrink-0" aria-hidden="true" />
