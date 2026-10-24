@@ -46,8 +46,8 @@ type ChatMessage = {
 };
 
 const AI_MODELS = [
-  { id: "gemini-3.8-flash", label: "3.8 Flash" },
   { id: "gemini-3.6-flash", label: "3.6 Flash" },
+  { id: "gemini-3.8-flash", label: "3.8 Flash" },
   { id: "gemini-3.1-pro", label: "3.1 Pro" },
 ] as const;
 
@@ -705,11 +705,11 @@ export function AiCommandBar() {
 
       {/* ESTADO ABERTO: Painel de mensagens + barra de input */}
       {isExpanded && (
-        <div className="flex w-[95vw] max-w-full flex-col gap-2 md:w-[600px] xl:w-[700px]">
+        <div className="flex w-max max-w-[95vw] flex-col gap-2">
           {/* PAINEL DE MENSAGENS (Histórico) — empilhado acima da barra, sem absolute */}
           {showChat ? (
-            <div className="pf-chat-rise flex max-h-[60vh] w-full flex-col overflow-hidden rounded-2xl border border-[#0F291E] bg-[#070C09]">
-            <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden md:flex-row">
+            <div className="pf-chat-rise flex max-h-[60vh] w-max max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-[#0F291E] bg-[#070C09]">
+            <div className="relative flex min-h-0 w-max max-w-[95vw] flex-1 flex-col overflow-hidden md:flex-row md:gap-4">
               <AnimatePresence initial={false}>
                 {showHistory ? (
                   <motion.aside
@@ -718,9 +718,9 @@ export function AiCommandBar() {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2, ease: "easeInOut" }}
-                    className="absolute inset-0 z-20 flex w-full flex-col overflow-hidden border-[#0F291E] bg-[#070C09] md:relative md:inset-auto md:z-auto md:w-auto md:shrink-0 md:border-r md:bg-transparent"
+                    className="absolute inset-0 z-20 flex w-full shrink-0 flex-col overflow-hidden border-[#0F291E] bg-[#070C09] md:relative md:inset-auto md:z-auto md:w-[250px] lg:w-[300px] md:border-r md:bg-transparent"
                   >
-                    <div className="flex h-full w-full flex-col gap-3 p-4 md:w-56 lg:w-64">
+                    <div className="flex h-full w-full flex-col gap-3 p-4">
                       <div className="flex items-center justify-between gap-2 md:block">
                         <p className="text-xs font-medium tracking-wide text-emerald-400/80 uppercase">
                           Conversas Recentes
@@ -796,7 +796,7 @@ export function AiCommandBar() {
                 ) : null}
               </AnimatePresence>
 
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4 md:p-5">
+              <div className="flex min-h-0 w-[95vw] shrink-0 flex-col p-4 md:w-[600px] md:p-5">
                 <header className="mb-4 flex shrink-0 items-center justify-between gap-2 border-b border-emerald-500/20 pb-3">
                   <button
                     type="button"
@@ -979,7 +979,10 @@ export function AiCommandBar() {
           {/* Avatar e Input lado a lado (Flexbox real) */}
           <form
             onSubmit={handleSubmit}
-            className="flex w-full items-center gap-3 md:gap-4"
+            className={cn(
+              "flex items-center gap-3 md:gap-4",
+              showChat ? "w-full" : "w-[95vw] md:w-[600px]",
+            )}
           >
             {/* Avatar Lado a Lado (Atua como botão de fechar) */}
             <button
