@@ -85,8 +85,10 @@ export async function fetchFinancialNews(): Promise<FinancialNews[]> {
   if (!apiKey) return [];
 
   const key = encodeURIComponent(apiKey);
-  const headlinesUrl = `https://newsapi.org/v2/top-headlines?country=br&category=business&apiKey=${key}`;
-  const searchUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent("economia OR bolsa OR bitcoin OR selic")}&language=pt&sortBy=publishedAt&pageSize=12&apiKey=${key}`;
+  const headlinesUrl = `https://newsapi.org/v2/top-headlines?country=br&category=business&pageSize=12&apiKey=${key}`;
+  const searchUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
+    '("economia" OR "finanças" OR "mercado financeiro" OR "ibovespa" OR "bolsa de valores")',
+  )}&language=pt&sortBy=publishedAt&pageSize=12&apiKey=${key}`;
 
   try {
     const headlines = await requestNews(headlinesUrl);

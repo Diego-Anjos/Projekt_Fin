@@ -1,8 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# ── Dependências ──────────────────────────────────────────────────
+node_modules
+.pnp
+.pnp.js
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +11,45 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# ── Testing ───────────────────────────────────────────────────────
 /coverage
 
-# next.js
-/.next/
-/out/
+# ── Build de Next.js ──────────────────────────────────────────────
+.next/
+out/
+build/
 
-# production
-/build
-
-# misc
-.DS_Store
+# ── Ficheiros de Ambiente e Segurança (MUITO IMPORTANTE) ──────────
+# Nunca commitar chaves (BRAPI_TOKEN, GEMINI_API_KEY, Appwrite, etc.)
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*
+!.env.example
 *.pem
 
-# debug
+# ── Logs ──────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+# ── Vercel / Deploy ───────────────────────────────────────────────
 .vercel
 
-# typescript
+# ── Editor e Sistema Operacional ──────────────────────────────────
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# ── Ficheiros de Cache ────────────────────────────────────────────
+.eslintcache
+.stylelintcache
 *.tsbuildinfo
+tsbuildinfo.json
 next-env.d.ts

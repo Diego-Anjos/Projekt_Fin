@@ -270,7 +270,7 @@
     "explanationStocks": "Les actions représentent de petites fractions d'une entreprise. En achetant une action, vous devenez associé de l'entreprise et pouvez profiter de l'appréciation du titre au fil du temps ou du versement d'une partie des bénéfices (dividendes).",
     "explanationFiis": "Les Fonds Immobiliers (FIIs) réunissent les ressources de plusieurs investisseurs pour investir dans l'immobilier (centres commerciaux, entrepôts, bureaux). Le principal avantage est de percevoir des 'loyers' mensuels, généralement exonérés d'impôt sur le revenu.",
     "explanationEtfs": "Les ETFs sont des fonds qui répliquent des indices de marché (comme l'Ibovespa ou le S&P 500), idéaux pour la diversification. Les BDRs sont des certificats négociés au Brésil représentant des actions de grandes entreprises étrangères (comme Apple, Google et Disney).",
-    "loadError": "Impossible de charger les cotations.",
+    "loadError": "Impossible de charger la liste des actifs pour le moment.",
     "loadingQuotes": "Chargement des cotations en direct...",
     "noAssetsFound": "Aucun actif trouvé dans {tab}.",
     "currentPrice": "Prix Actuel",

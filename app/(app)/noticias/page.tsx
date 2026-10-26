@@ -2,6 +2,7 @@
 
 import { useDynamicTranslations } from "@/hooks/use-dynamic-translation";
 import { useTranslation } from "@/hooks/use-translation";
+import { getApiAuthHeaders, markAppSession } from "@/lib/appwrite/session";
 import { Newspaper, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -25,14 +26,14 @@ const filters: { id: NewsCategory; labelKey: string }[] = [
 ];
 
 /**
- * Termos de pesquisa enviados à API. Ficam em PT de propósito: a rota
- * `/api/news` pesquisa domínios financeiros portugueses (`language=pt`),
- * por isso traduzir a query quebraria os resultados.
+ * Termos exatos enviados à NewsAPI (`everything`). Ficam em PT de propósito:
+ * a rota pesquisa `language=pt` + domínios financeiros — traduzir a query
+ * quebraria os resultados.
  */
 const filterQueries: Record<Exclude<NewsCategory, "geral">, string> = {
-  cripto: "cripto OR bitcoin OR ethereum",
-  acoes: "ações OR bolsa OR ibovespa",
-  macro: "selic OR copom OR inflação OR pib",
+  cripto: "bitcoin OR ethereum OR criptomoeda OR criptoativos OR crypto",
+  acoes: "ibovespa OR \"bolsa de valores\" OR \"ações\" OR B3 OR \"mercado de ações\"",
+  macro: "Selic OR COPOM OR inflação OR PIB OR \"juros\" OR \"política monetária\"",
 };
 
 function isNewsArticle(value: unknown): value is NewsArticle {
@@ -187,16 +188,41 @@ export default function NoticiasPage() {
   useEffect(() => {
     const controller = new AbortController();
 
+    async function fetchNews(path: string) {
+      await markAppSession();
+      if (controller.signal.aborted) return null;
+
+      const authHeaders = await getApiAuthHeaders();
+      if (controller.signal.aborted) return null;
+
+      return fetch(path, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+      });
+    }
+
     async function loadNews() {
       setIsLoading(true);
       setLoadError(null);
 
       try {
-        const response = await fetch(newsPath(activeFilter, debouncedSearch), {
-          signal: controller.signal,
-        });
-        const data: unknown = await response.json();
+        const path = newsPath(activeFilter, debouncedSearch);
+        let response = await fetchNews(path);
+        if (!response || controller.signal.aborted) return;
 
+        // Retentativa após re-sync se a sessão ainda não estava no cookie.
+        if (response.status === 401) {
+          response = await fetchNews(path);
+          if (!response || controller.signal.aborted) return;
+        }
+
+        const data: unknown = await response.json();
         if (controller.signal.aborted) return;
 
         if (!response.ok || !Array.isArray(data)) {
@@ -206,6 +232,7 @@ export default function NoticiasPage() {
         }
 
         setArticles(data.filter(isNewsArticle));
+        setLoadError(null);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
         setArticles([]);

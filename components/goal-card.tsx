@@ -114,7 +114,7 @@ export function GoalCard({ goal, onEdit, onDelete, isDeleting = false }: GoalCar
 
   return (
     <article
-      className={`group relative flex flex-col rounded-2xl border p-5 pb-6 backdrop-blur-sm transition-colors duration-200 ${
+      className={`group relative flex h-full flex-col rounded-2xl border p-5 pb-6 backdrop-blur-sm transition-colors duration-200 ${
         isCompleted
           ? "border-amber-500/20 bg-zinc-900/40 opacity-90 hover:border-amber-500/35"
           : "border-zinc-700/50 bg-black/60 hover:border-emerald-500/40"

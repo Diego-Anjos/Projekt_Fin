@@ -270,7 +270,7 @@
     "explanationStocks": "Stocks represent small fractions of a company. When you buy a stock, you become a partner in the business and can profit from the share's appreciation over time or from receiving part of the profits (dividends).",
     "explanationFiis": "Real Estate Funds (FIIs) pool resources from many investors to invest in the property market (malls, warehouses, office buildings). The main advantage is receiving monthly 'rent', usually income-tax free.",
     "explanationEtfs": "ETFs are funds that replicate market indices (such as the Ibovespa or S&P 500), ideal for diversification. BDRs are receipts traded in Brazil that represent shares of large foreign companies (such as Apple, Google and Disney).",
-    "loadError": "Could not load quotes.",
+    "loadError": "Could not load the asset list at the moment.",
     "loadingQuotes": "Loading live quotes...",
     "noAssetsFound": "No assets found in {tab}.",
     "currentPrice": "Current Price",

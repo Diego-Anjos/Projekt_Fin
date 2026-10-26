@@ -15,7 +15,7 @@ import { Plus, Target, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-const ITEMS_PER_PAGE = 10;
+const itemsPerPage = 6;
 
 const GOAL_CATEGORIES = new Set<GoalCategory>([
   "travel",
@@ -64,7 +64,7 @@ export default function MetasPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Nota: ativas e alcançadas são separadas dentro da página atual (10 itens).
+  // Nota: ativas e alcançadas são separadas dentro da página atual (6 itens).
   const activeGoals = goals.filter((goal) => !goal.isCompleted);
   const completedGoals = goals.filter((goal) => goal.isCompleted);
 
@@ -72,12 +72,12 @@ export default function MetasPage() {
     try {
       const response = await getGoals(
         user.$id,
-        ITEMS_PER_PAGE,
-        (currentPage - 1) * ITEMS_PER_PAGE,
+        itemsPerPage,
+        (currentPage - 1) * itemsPerPage,
       );
       setTotalItems(response.total);
 
-      const lastPage = Math.max(1, Math.ceil(response.total / ITEMS_PER_PAGE));
+      const lastPage = Math.max(1, Math.ceil(response.total / itemsPerPage));
       if (response.total > 0 && currentPage > lastPage) {
         setCurrentPage(lastPage);
         return;
@@ -98,13 +98,13 @@ export default function MetasPage() {
       try {
         const response = await getGoals(
           user.$id,
-          ITEMS_PER_PAGE,
-          (currentPage - 1) * ITEMS_PER_PAGE,
+          itemsPerPage,
+          (currentPage - 1) * itemsPerPage,
         );
         if (!active) return;
         setTotalItems(response.total);
 
-        const lastPage = Math.max(1, Math.ceil(response.total / ITEMS_PER_PAGE));
+        const lastPage = Math.max(1, Math.ceil(response.total / itemsPerPage));
         if (response.total > 0 && currentPage > lastPage) {
           setCurrentPage(lastPage);
           return;
@@ -229,9 +229,9 @@ export default function MetasPage() {
               {t("goals.allCompleted")}
             </div>
           ) : (
-            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
+            <ul className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
               {activeGoals.map((goal) => (
-                <li key={goal.id}>
+                <li key={goal.id} className="h-full">
                   <GoalCard
                     goal={goal}
                     onEdit={openEditModal}
@@ -244,17 +244,17 @@ export default function MetasPage() {
           )}
 
           {completedGoals.length > 0 ? (
-            <section aria-labelledby="completed-goals-heading">
+            <section aria-labelledby="completed-goals-heading" className="mb-8">
               <h2
                 id="completed-goals-heading"
-                className="mt-8 mb-6 flex items-center gap-2 text-xl font-bold text-white md:mt-12"
+                className="mb-6 flex items-center gap-2 text-xl font-bold text-white md:mt-4"
               >
                 <Trophy className="h-5 w-5 text-emerald-500" aria-hidden="true" />
                 {t("goals.completed")}
               </h2>
-              <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
+              <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {completedGoals.map((goal) => (
-                  <li key={goal.id}>
+                  <li key={goal.id} className="h-full">
                     <GoalCard
                       goal={goal}
                       onEdit={openEditModal}
@@ -271,7 +271,7 @@ export default function MetasPage() {
             <Pagination
               currentPage={currentPage}
               totalItems={totalItems}
-              itemsPerPage={ITEMS_PER_PAGE}
+              itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
             />
           ) : null}
