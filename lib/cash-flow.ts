@@ -3,7 +3,11 @@ export type CashTransaction = {
   category: string;
   date: string;
   amount: number;
+  description?: string;
+  id?: string;
 };
+
+export type CashFlowViewMode = "mensal" | "anual";
 
 export type MonthPoint = {
   year: number;
@@ -80,10 +84,20 @@ function finiteAmount(value: number) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function matchesPeriod(
+  point: MonthPoint,
+  year: number,
+  month: number | null,
+) {
+  if (point.year !== year) return false;
+  if (month === null) return true;
+  return point.month === month;
+}
+
 export function sumByType(
   transactions: CashTransaction[],
   year: number,
-  month: number,
+  month: number | null,
   type: CashTransaction["type"],
 ) {
   let total = 0;
@@ -91,7 +105,7 @@ export function sumByType(
   for (const transaction of transactions) {
     if (transaction.type !== type) continue;
     const point = readMonth(transaction.date);
-    if (!point || point.year !== year || point.month !== month) continue;
+    if (!point || !matchesPeriod(point, year, month)) continue;
     total += finiteAmount(transaction.amount);
   }
 
@@ -101,14 +115,14 @@ export function sumByType(
 export function expenseCategories(
   transactions: CashTransaction[],
   year: number,
-  month: number,
+  month: number | null,
 ): CategoryTotal[] {
   const totals = new Map<string, number>();
 
   for (const transaction of transactions) {
     if (transaction.type !== "expense") continue;
     const point = readMonth(transaction.date);
-    if (!point || point.year !== year || point.month !== month) continue;
+    if (!point || !matchesPeriod(point, year, month)) continue;
 
     const amount = finiteAmount(transaction.amount);
     if (amount === 0) continue;
@@ -127,6 +141,57 @@ export function expenseCategories(
     ...entry,
     percent: total > 0 ? (entry.value / total) * 100 : 0,
   }));
+}
+
+/** Maiores movimentações do período (mês ou ano), por valor absoluto. */
+export function topMovements(
+  transactions: CashTransaction[],
+  year: number,
+  month: number | null,
+  limit = 5,
+): CashTransaction[] {
+  return transactions
+    .filter((transaction) => {
+      const point = readMonth(transaction.date);
+      return point ? matchesPeriod(point, year, month) : false;
+    })
+    .sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount))
+    .slice(0, limit);
+}
+
+/** Gastos mensais do ano (dias 1–12 = Jan–Dez) para o heatmap em visão anual. */
+export function monthlyExpensesForYear(
+  transactions: CashTransaction[],
+  year: number,
+): DailyExpense[] {
+  const totals = Array.from({ length: 12 }, () => 0);
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "expense") continue;
+    const point = readMonth(transaction.date);
+    if (!point || point.year !== year) continue;
+    totals[point.month] += finiteAmount(transaction.amount);
+  }
+
+  return totals.map((amount, index) => ({
+    day: index + 1,
+    amount: roundCurrency(amount),
+  }));
+}
+
+export function yearOptions(transactions: CashTransaction[], now = new Date()): number[] {
+  const currentYear = now.getFullYear();
+  const years = new Set<number>([currentYear]);
+
+  for (const transaction of transactions) {
+    const point = readMonth(transaction.date);
+    if (!point) continue;
+    if (point.year >= currentYear - 10 && point.year <= currentYear + 2) {
+      years.add(point.year);
+    }
+  }
+
+  return [...years].sort((left, right) => right - left);
 }
 
 export function dailyExpenses(
@@ -215,6 +280,7 @@ export type SubscriptionCashSource = {
   status: string;
   subscribedAt: string;
   nextDue: string;
+  name?: string;
 };
 
 function isActiveSubscription(status: string) {
@@ -276,9 +342,22 @@ export function subscriptionExpensesForMonth(
       category: SUBSCRIPTIONS_CATEGORY,
       date: isoDateInMonth(year, month, day),
       amount: roundCurrency(amount),
+      description: subscription.name?.trim() || SUBSCRIPTIONS_CATEGORY,
     });
   }
 
+  return expenses;
+}
+
+/** Despesas virtuais de assinaturas em todos os meses do ano. */
+export function subscriptionExpensesForYear(
+  subscriptions: SubscriptionCashSource[],
+  year: number,
+): CashTransaction[] {
+  const expenses: CashTransaction[] = [];
+  for (let month = 0; month < 12; month += 1) {
+    expenses.push(...subscriptionExpensesForMonth(subscriptions, year, month));
+  }
   return expenses;
 }
 

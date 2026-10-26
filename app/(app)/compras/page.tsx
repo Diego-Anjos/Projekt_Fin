@@ -1,5 +1,6 @@
 "use client";
 
+import { AllocateToGoalModal } from "@/components/allocate-to-goal-modal";
 import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
@@ -16,7 +17,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatInstallmentDescription } from "@/lib/installments";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Pencil, Plus, Receipt, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Receipt, Search, Target, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -72,6 +73,7 @@ export default function ComprasPage() {
     Pending: t("transactions.pending"),
   } as const;
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -267,14 +269,25 @@ export default function ComprasPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {t("transactions.new")}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsGoalModalOpen(true)}
+            aria-label={t("transactions.allocateToGoals")}
+            className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#10B981]/50 bg-[#0B1410] px-4 py-2 font-medium text-[#10B981] transition-colors hover:bg-[#10B981]/10"
+          >
+            <Target className="size-4 shrink-0" aria-hidden="true" />
+            <span className="hidden sm:inline">{t("transactions.allocateToGoals")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-500"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            {t("transactions.new")}
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-zinc-700/50 bg-black px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
@@ -479,6 +492,15 @@ export default function ComprasPage() {
         transaction={editing}
         onClose={closeModal}
         onSave={handleSave}
+      />
+
+      <AllocateToGoalModal
+        open={isGoalModalOpen}
+        onClose={() => setIsGoalModalOpen(false)}
+        onAllocated={() => {
+          if (currentPage !== 1) setCurrentPage(1);
+          setRefreshKey((key) => key + 1);
+        }}
       />
     </div>
   );

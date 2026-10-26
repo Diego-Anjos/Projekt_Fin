@@ -56,35 +56,63 @@ function extractSessionSecret(request: Request): string | null {
 /**
  * Verifica sessão válida. Em falha devolve imediatamente
  * `{ error: NextResponse }` com status 401 — o handler deve `return result.error`.
+ *
+ * @param debugLabel Prefixo opcional nos logs (ex: "api/market") para localizar o 401 no terminal.
  */
-export async function requireApiSession(request: Request): Promise<ApiAuthResult> {
-  const unauthorized = (): ApiAuthFailure => ({
-    error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-  });
+export async function requireApiSession(
+  request: Request,
+  debugLabel?: string,
+): Promise<ApiAuthResult> {
+  const tag = debugLabel ? `[${debugLabel}]` : "[api-auth]";
+
+  const unauthorized = (reason: string): ApiAuthFailure => {
+    console.error(`DEBUG API ${tag}: Falha na sessão — ${reason}. Retornando 401.`);
+    return {
+      error: NextResponse.json({ error: "Unauthorized", reason }, { status: 401 }),
+    };
+  };
 
   const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT;
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
-  if (!endpoint || !projectId) return unauthorized();
+  if (!endpoint || !projectId) {
+    return unauthorized(
+      "NEXT_PUBLIC_APPWRITE_ENDPOINT ou NEXT_PUBLIC_APPWRITE_PROJECT_ID ausentes no .env",
+    );
+  }
+
+  const hasBearer = Boolean(
+    request.headers.get("authorization")?.toLowerCase().startsWith("bearer "),
+  );
+  const cookieHeader = request.headers.get("cookie");
+  const hasAwCookie = Boolean(readCookie(cookieHeader, APP_SESSION_SECRET_COOKIE));
+  const hasMarker = readCookie(cookieHeader, APP_SESSION_COOKIE) === "1";
 
   const secret = extractSessionSecret(request);
   // Marcador sozinho não autentica APIs (evitar abuso só com pf_session=1).
   if (!secret) {
-    const marker = readCookie(request.headers.get("cookie"), APP_SESSION_COOKIE);
-    if (marker === "1") {
-      // Sessão marcador sem secret: cliente desatualizado / cookieFallback não sincronizado.
-      return unauthorized();
+    if (hasMarker) {
+      return unauthorized(
+        `cookie pf_session=1 presente mas sem secret (pf_aw_session/Bearer/a_session_*). bearer=${hasBearer} pf_aw_session=${hasAwCookie}`,
+      );
     }
-    return unauthorized();
+    return unauthorized(
+      `nenhum secret de sessão no pedido. bearer=${hasBearer} pf_aw_session=${hasAwCookie} pf_session=${hasMarker}`,
+    );
   }
 
   try {
     const client = new Client().setEndpoint(endpoint).setProject(projectId).setSession(secret);
     const account = new Account(client);
     const user = await account.get();
-    if (!user?.$id) return unauthorized();
+    if (!user?.$id) {
+      return unauthorized("account.get() ok mas user.$id vazio");
+    }
     return { user };
-  } catch {
-    return unauthorized();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return unauthorized(
+      `account.get() rejeitou o secret (sessão expirada/inválida?). detalhe=${message}`,
+    );
   }
 }
 

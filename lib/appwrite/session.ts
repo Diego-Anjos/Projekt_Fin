@@ -73,6 +73,18 @@ export async function markAppSession() {
   }
 }
 
+/**
+ * Headers para `fetch` a `/api/*` autenticadas.
+ * Preferimos cookie `pf_aw_session` (via credentials:include); o Bearer
+ * cobre o caso em que o secret só existe no cookieFallback e o cookie
+ * ainda não foi escrito / foi bloqueado.
+ */
+export async function getApiAuthHeaders(): Promise<HeadersInit> {
+  const secret = await resolveSessionSecret();
+  if (!secret) return {};
+  return { Authorization: `Bearer ${secret}` };
+}
+
 /** Remove vestígios locais da sessão Appwrite + marcadores da app. */
 export function clearAppSessionArtifacts() {
   if (typeof window === "undefined") return;

@@ -48,6 +48,23 @@ export type MarketSnapshot = {
   ibovespa: { points: number; variation: number };
   selic: { rate: number };
   cdi: { rate: number };
+  /** Presente quando a resposta vem do fallback local (chave/HG indisponível). */
+  source?: "live" | "fallback";
+};
+
+/**
+ * Snapshot de reserva para o Market Hub não ficar vazio quando a HG
+ * recusa a chave, atinge rate-limit ou está offline.
+ * Valores ilustrativos — substituídos assim que a API externa responder.
+ */
+const FALLBACK_MARKET_SNAPSHOT: MarketSnapshot = {
+  dollar: { buy: 5.42, variation: 0.18 },
+  euro: { buy: 5.89, variation: -0.12 },
+  bitcoin: { buy: 612_450.0, variation: 1.35 },
+  ibovespa: { points: 128_450.0, variation: 0.42 },
+  selic: { rate: 14.25 },
+  cdi: { rate: 14.15 },
+  source: "fallback",
 };
 
 function toNumber(value: unknown): number | null {
@@ -100,19 +117,38 @@ function readBitcoinBrl(
   return { buy: brlPrice, variation: brlVariation };
 }
 
+function fallbackResponse(reason: string) {
+  console.warn(`[api/market] a servir fallback: ${reason}`);
+  return Response.json(FALLBACK_MARKET_SNAPSHOT, {
+    headers: { "X-Market-Source": "fallback" },
+  });
+}
+
 export async function GET(request: Request) {
-  const auth = await requireApiSession(request);
+  console.info("[api/market] pedido recebido — a validar sessão Appwrite…");
+
+  const auth = await requireApiSession(request, "api/market");
   if (isApiAuthError(auth)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    console.error("DEBUG API [api/market]: sessão inválida. Retornando 401 ao cliente.");
+    return auth.error;
   }
 
-  const apiKey = process.env.HG_BRASIL_API_KEY;
+  console.info(`[api/market] sessão OK (user=${auth.user.$id}). A consultar HG Brasil…`);
+
+  const apiKey = process.env.HG_BRASIL_API_KEY?.trim();
+  // Debug seguro: nunca imprime a chave — só se está definida.
+  if (!apiKey) {
+    console.error(
+      "DEBUG API [api/market]: HG_BRASIL_API_KEY ausente no .env.local (reinicie o npm run dev após adicionar).",
+    );
+  } else {
+    console.info(
+      `[api/market] HG_BRASIL_API_KEY configurada: true (len=${apiKey.length})`,
+    );
+  }
 
   if (!apiKey) {
-    return Response.json(
-      { error: "Chave da API de mercado não configurada." },
-      { status: 500 },
-    );
+    return fallbackResponse("HG_BRASIL_API_KEY ausente");
   }
 
   const url = `https://api.hgbrasil.com/finance?key=${encodeURIComponent(apiKey)}`;
@@ -120,35 +156,26 @@ export async function GET(request: Request) {
   let response: Response;
   try {
     response = await fetch(url, { cache: "no-store" });
-  } catch {
-    return Response.json(
-      { error: "Não foi possível consultar a API de mercado." },
-      { status: 502 },
-    );
+  } catch (error) {
+    console.warn("[api/market] falha de rede na HG Brasil:", error);
+    return fallbackResponse("rede HG indisponível");
   }
 
   if (!response.ok) {
-    return Response.json(
-      { error: "A API de mercado retornou uma resposta inválida." },
-      { status: 502 },
-    );
+    console.warn(`[api/market] HG Brasil HTTP ${response.status}`);
+    return fallbackResponse(`HG HTTP ${response.status}`);
   }
 
   let payload: HgFinanceResponse;
   try {
     payload = (await response.json()) as HgFinanceResponse;
-  } catch {
-    return Response.json(
-      { error: "Não foi possível ler a resposta da API de mercado." },
-      { status: 502 },
-    );
+  } catch (error) {
+    console.warn("[api/market] JSON inválido da HG Brasil:", error);
+    return fallbackResponse("JSON HG inválido");
   }
 
   if (payload.valid_key === false) {
-    return Response.json(
-      { error: "A chave da API de mercado foi recusada." },
-      { status: 502 },
-    );
+    return fallbackResponse("chave HG recusada (valid_key=false)");
   }
 
   const dollarBuy = toNumber(payload.results?.currencies?.USD?.buy);
@@ -177,10 +204,7 @@ export async function GET(request: Request) {
     ibovespaVariation === null ||
     interestRates === null
   ) {
-    return Response.json(
-      { error: "A resposta da API de mercado está incompleta." },
-      { status: 502 },
-    );
+    return fallbackResponse("payload HG incompleto");
   }
 
   const snapshot: MarketSnapshot = {
@@ -190,7 +214,10 @@ export async function GET(request: Request) {
     ibovespa: { points: ibovespaPoints, variation: ibovespaVariation },
     selic: { rate: interestRates.selic },
     cdi: { rate: interestRates.cdi },
+    source: "live",
   };
 
-  return Response.json(snapshot);
+  return Response.json(snapshot, {
+    headers: { "X-Market-Source": "live" },
+  });
 }

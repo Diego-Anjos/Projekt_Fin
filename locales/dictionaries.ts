@@ -211,6 +211,7 @@ export type Dictionary = {
     deleteConfirm: string;
     deleted: string;
     deleteError: string;
+    allocateToGoals: string;
   };
   settings: {
     title: string;
@@ -275,12 +276,28 @@ export type Dictionary = {
     dataSubtitle: string;
     preparingExport: string;
     noDataToExport: string;
+    exportNoMatches: string;
     exportDoneOne: string;
     exportDoneMany: string;
     exportError: string;
     accountDeleted: string;
     exporting: string;
     exportCsv: string;
+    exportModalTitle: string;
+    exportModalSubtitle: string;
+    exportPeriod: string;
+    exportPeriod_this_month: string;
+    exportPeriod_last_3_months: string;
+    exportPeriod_last_year: string;
+    exportPeriod_all: string;
+    exportTypes: string;
+    exportTypeIncome: string;
+    exportTypeExpenses: string;
+    exportTypeGoals: string;
+    exportTypeSubscriptions: string;
+    exportSelectType: string;
+    exportFormat: string;
+    generateReport: string;
     dangerZone: string;
     dangerZoneText: string;
     deleteAccount: string;
@@ -334,6 +351,10 @@ export type Dictionary = {
     title: string;
     subtitle: string;
     month: string;
+    year: string;
+    viewModeAria: string;
+    viewMonthly: string;
+    viewAnnual: string;
     summaryAria: string;
     income: string;
     incomeDesc: string;
@@ -343,11 +364,20 @@ export type Dictionary = {
     chartsAria: string;
     expensesByCategory: string;
     noExpensesMonth: string;
+    noExpensesYear: string;
     expensesInMonth: string;
+    expensesInYear: string;
     loadError: string;
     spendingInMonth: string;
     heatmapAria: string;
     dayLabel: string;
+    xrayAria: string;
+    xrayTitle: string;
+    xraySubtitle: string;
+    topCategories: string;
+    topMovements: string;
+    xrayEmptyCategories: string;
+    xrayEmptyMovements: string;
   };
   widgets: {
     recentTransactions: string;
@@ -448,6 +478,29 @@ export type Dictionary = {
     created: string;
     updated: string;
     saveError: string;
+  };
+  allocateGoalModal: {
+    title: string;
+    subtitle: string;
+    availableBalance: string;
+    selectGoal: string;
+    noGoals: string;
+    remainingLabel: string;
+    amount: string;
+    useFullAmount: string;
+    transfer: string;
+    transferring: string;
+    goalRequired: string;
+    amountError: string;
+    noBalance: string;
+    exceedsBalance: string;
+    exceedsRemaining: string;
+    sessionMissing: string;
+    loadError: string;
+    submitError: string;
+    success: string;
+    transactionDescription: string;
+    transactionCategory: string;
   };
   deleteAccount: {
     title: string;

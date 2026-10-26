@@ -10,13 +10,9 @@ import {
 import { updateUserProfile } from "@/lib/appwrite/auth";
 import { account } from "@/lib/appwrite/client";
 import { DeleteAccountModal } from "@/components/delete-account-modal";
-import {
-  countUserData,
-  deleteAllUserData,
-  fetchAllUserData,
-} from "@/lib/appwrite/user-data";
+import { ExportDataModal } from "@/components/export-data-modal";
+import { deleteAllUserData } from "@/lib/appwrite/user-data";
 import { clearAppSessionArtifacts, signOutCurrentSession } from "@/lib/appwrite/session";
-import { buildUserDataCsv, downloadCsv } from "@/lib/export-csv";
 import { useTranslation } from "@/hooks/use-translation";
 import { useRouter } from "next/navigation";
 import { AppSelect } from "@/components/ui/app-select";
@@ -558,36 +554,8 @@ function DataPanel() {
   const { t } = useTranslation();
   const { user } = useSession();
   const router = useRouter();
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
-  async function handleExportCSV() {
-    if (isExporting) return;
-
-    setIsExporting(true);
-    const toastId = toast.loading(t("settings.preparingExport"));
-
-    try {
-      const data = await fetchAllUserData(user.$id);
-      const total = countUserData(data);
-
-      if (total === 0) {
-        toast.info(t("settings.noDataToExport"), { id: toastId });
-        return;
-      }
-
-      downloadCsv("projekt-fin-export.csv", buildUserDataCsv(data));
-      toast.success(
-        t(total === 1 ? "settings.exportDoneOne" : "settings.exportDoneMany", { count: total }),
-        { id: toastId },
-      );
-    } catch (error) {
-      console.error("Falha ao exportar dados:", error);
-      toast.error(t("settings.exportError"), { id: toastId });
-    } finally {
-      setIsExporting(false);
-    }
-  }
 
   async function handleDeleteAccount() {
     // 1) Apaga transações, metas (+ imagens), assinaturas e categorias.
@@ -616,16 +584,11 @@ function DataPanel() {
 
       <button
         type="button"
-        onClick={() => void handleExportCSV()}
-        disabled={isExporting}
-        className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-100 transition-colors duration-200 hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+        onClick={() => setIsExportModalOpen(true)}
+        className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-100 transition-colors duration-200 hover:border-zinc-600 hover:bg-zinc-800"
       >
-        {isExporting ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <Download className="size-4" aria-hidden="true" />
-        )}
-        {isExporting ? t("settings.exporting") : t("settings.exportCsv")}
+        <Download className="size-4" aria-hidden="true" />
+        {t("settings.exportCsv")}
       </button>
 
       <div className="rounded-xl border border-red-900/50 p-5">
@@ -642,6 +605,8 @@ function DataPanel() {
           {t("settings.deleteAccount")}
         </button>
       </div>
+
+      <ExportDataModal open={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
 
       <DeleteAccountModal
         open={isDeleteModalOpen}
