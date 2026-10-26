@@ -14,6 +14,9 @@ export const registerFormSchema = z.object({
   name: z.string().trim().min(1, "Nome obrigatório."),
   email: z.email("Email inválido."),
   password: passwordSchema,
+  terms: z.boolean().refine((val) => val === true, {
+    message: "Você precisa concordar com os Termos e Condições.",
+  }),
 });
 
 export type LoginFormValues = z.infer<typeof loginFormSchema>;

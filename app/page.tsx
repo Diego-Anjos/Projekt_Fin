@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AmbientBackground } from "@/components/AmbientBackground";
+import { Checkbox } from "@/components/ui/checkbox";
 import { account } from "@/lib/appwrite/client";
 import {
   clearAppSessionArtifacts,
@@ -52,7 +53,8 @@ function GoogleIcon() {
   );
 }
 
-type AuthFormValues = LoginFormValues & Partial<Pick<RegisterFormValues, "name">>;
+type AuthFormValues = LoginFormValues &
+  Partial<Pick<RegisterFormValues, "name" | "terms">>;
 
 type AuthFormProps = {
   isSignUp: boolean;
@@ -66,6 +68,7 @@ function AuthForm({ isSignUp, loading, error, onToggleMode, onSubmit }: AuthForm
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<AuthFormValues>({
     resolver: zodResolver(isSignUp ? registerFormSchema : loginFormSchema),
@@ -76,8 +79,12 @@ function AuthForm({ isSignUp, loading, error, onToggleMode, onSubmit }: AuthForm
       email: "",
       password: "",
       remember: false,
+      terms: false,
     },
   });
+
+  const termsAccepted = watch("terms") === true;
+  const submitDisabled = loading || (isSignUp && !termsAccepted);
 
   return (
     <>
@@ -136,22 +143,52 @@ function AuthForm({ isSignUp, loading, error, onToggleMode, onSubmit }: AuthForm
         </label>
 
         {!isSignUp && (
-          <div className="flex items-center justify-between gap-4">
-            <label className="inline-flex cursor-pointer items-center gap-3">
-              <span className="relative inline-flex">
-                <input type="checkbox" className="peer sr-only" {...register("remember")} />
-                <span className="block h-5 w-9 rounded-full bg-slate-700 transition duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50" />
-                <span className="pointer-events-none absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition duration-200 peer-checked:translate-x-4" />
-              </span>
-              <span className="text-sm text-slate-300">Remember me</span>
-            </label>
-
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex min-w-0 items-center space-x-2">
+              <Checkbox id="remember" {...register("remember")} />
+              <label htmlFor="remember" className="cursor-pointer text-sm text-gray-400">
+                Remember me
+              </label>
+            </div>
             <a
               href="#esqueci-senha"
-              className="text-sm text-emerald-400 transition hover:text-emerald-300"
+              className="shrink-0 text-sm text-[#10B981] transition hover:underline"
             >
               Forgot password?
             </a>
+          </div>
+        )}
+
+        {isSignUp && (
+          <div className="my-4 space-y-2">
+            <div className="flex w-full items-start space-x-2">
+              <Checkbox
+                id="terms"
+                aria-invalid={errors.terms ? true : undefined}
+                {...register("terms")}
+              />
+              <label
+                htmlFor="terms"
+                className="min-w-0 flex-1 cursor-pointer text-sm leading-snug text-gray-400"
+              >
+                Eu concordo com os{" "}
+                <a
+                  href="/termos"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#10B981] hover:underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  Termos e Condições
+                </a>{" "}
+                e as políticas de privacidade do Projekt Fin.
+              </label>
+            </div>
+            {errors.terms ? (
+              <span className="block text-sm text-red-400" role="alert">
+                {errors.terms.message}
+              </span>
+            ) : null}
           </div>
         )}
 
@@ -159,7 +196,7 @@ function AuthForm({ isSignUp, loading, error, onToggleMode, onSubmit }: AuthForm
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={submitDisabled}
           className="w-full rounded-lg bg-gradient-to-r from-emerald-600 to-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 transition duration-200 hover:shadow-emerald-500/40 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? "Processing..." : isSignUp ? "Sign up" : "Sign in"}
@@ -273,7 +310,7 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="flex h-screen w-full items-center justify-center bg-slate-950">
+      <main className="flex min-h-dvh w-full items-center justify-center bg-slate-950">
         <div className="flex flex-col items-center gap-4">
           <span
             className="size-10 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-400"
@@ -286,8 +323,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex h-screen w-full bg-slate-950">
-      <section className="relative hidden h-full w-1/2 overflow-hidden bg-slate-950 bg-[radial-gradient(circle_at_45%_50%,_rgba(3,46,34,0.65)_0%,_rgba(2,21,17,0.3)_50%,_rgba(2,6,5,0.95)_100%)] lg:flex">
+    <main className="flex min-h-dvh w-full bg-slate-950">
+      {/* Painel 3D + citação: só desktop */}
+      <section className="relative hidden h-auto min-h-dvh w-1/2 overflow-hidden bg-slate-950 bg-[radial-gradient(circle_at_45%_50%,_rgba(3,46,34,0.65)_0%,_rgba(2,21,17,0.3)_50%,_rgba(2,6,5,0.95)_100%)] lg:flex">
         <div className="relative h-full w-full">
           <Logo3D />
         </div>
@@ -300,47 +338,46 @@ export default function LoginPage() {
         </blockquote>
       </section>
 
-      <section className="relative h-full w-full overflow-hidden bg-[#000503] lg:w-1/2">
+      {/* Formulário: full-width no mobile, metade no desktop */}
+      <section className="relative flex min-h-dvh w-full flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-[#000503] p-4 sm:p-8 lg:w-1/2">
         <div className="pointer-events-none absolute inset-0 z-0 opacity-[0.12]">
           <AmbientBackground contained />
         </div>
         <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_8%,#000000_72%)] opacity-90" />
 
-        <div className="relative z-10 flex h-full w-full justify-center overflow-y-auto px-6">
-          <div className="relative z-10 my-auto w-full max-w-md py-10">
-            <div className="mb-10 flex w-full justify-center">
-              <Image
-                src="/Logotipo Projekt Fin em fundo transparente.png"
-                alt="Logotipo Projekt Fin"
-                width={220}
-                height={110}
-                priority
-                className="object-contain"
-              />
-            </div>
-            <div className="mb-10 flex w-full flex-col items-center text-center">
-              <h1 className="text-3xl font-bold tracking-tight text-white">
-                {isSignUp ? "Create an account" : "Welcome to Projekt Fin"}
-              </h1>
-              <p className="mt-2 text-slate-400">
-                {isSignUp
-                  ? "Start managing your finances today."
-                  : "Track your expenses and take control of your money."}
-              </p>
-            </div>
-
-            <AuthForm
-              key={isSignUp ? "register" : "login"}
-              isSignUp={isSignUp}
-              loading={loading}
-              error={error}
-              onSubmit={onValidSubmit}
-              onToggleMode={() => {
-                setIsSignUp((current) => !current);
-                setError("");
-              }}
+        <div className="relative z-10 w-full max-w-md py-6 sm:py-10">
+          <div className="mb-8 flex w-full justify-center sm:mb-10">
+            <Image
+              src="/Logotipo Projekt Fin em fundo transparente.png"
+              alt="Logotipo Projekt Fin"
+              width={220}
+              height={110}
+              priority
+              className="h-auto w-[160px] object-contain sm:w-[200px] lg:w-[220px]"
             />
           </div>
+          <div className="mb-8 flex w-full flex-col items-center text-center sm:mb-10">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              {isSignUp ? "Create an account" : "Welcome to Projekt Fin"}
+            </h1>
+            <p className="mt-2 max-w-sm text-sm text-slate-400">
+              {isSignUp
+                ? "Start managing your finances today."
+                : "Track your expenses and take control of your money."}
+            </p>
+          </div>
+
+          <AuthForm
+            key={isSignUp ? "register" : "login"}
+            isSignUp={isSignUp}
+            loading={loading}
+            error={error}
+            onSubmit={onValidSubmit}
+            onToggleMode={() => {
+              setIsSignUp((current) => !current);
+              setError("");
+            }}
+          />
         </div>
       </section>
     </main>
