@@ -5,19 +5,37 @@
 ![Preview do Projeto](https://via.placeholder.com/1200x600/070C09/10B981?text=Projekt+Fin+-+Dashboard)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" />
-  <img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Appwrite-FD366E?style=for-the-badge&logo=appwrite&logoColor=white" alt="Appwrite" />
-  <img src="https://img.shields.io/badge/Gemini-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Google Gemini" />
+  <a href="https://nextjs.org/" target="_blank">
+    <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" />
+  </a>
+  <a href="https://react.dev/" target="_blank">
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  </a>
+  <a href="https://www.typescriptlang.org/" target="_blank">
+    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  </a>
+  <a href="https://tailwindcss.com/" target="_blank">
+    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+  </a>
+  <a href="https://appwrite.io/" target="_blank">
+    <img src="https://img.shields.io/badge/Appwrite-FD366E?style=for-the-badge&logo=appwrite&logoColor=white" alt="Appwrite" />
+  </a>
+  <a href="https://ai.google.dev/" target="_blank">
+    <img src="https://img.shields.io/badge/Gemini-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Google Gemini" />
+  </a>
 </p>
 
 ---
 
+## 🎯 O Propósito
+
+O **Projekt Fin** nasceu com um objetivo claro: ser o seu **controle de gastos definitivo**. A plataforma foi desenhada para proporcionar um **melhor controle financeiro** ao utilizador, transformando a gestão do dinheiro de uma tarefa chata e complexa numa experiência intuitiva, visual e recompensadora.
+
+Seja para mapear para onde o seu salário está a ir, cortar despesas desnecessárias ou acelerar a compra de um bem, o sistema dá-lhe o poder e a clareza necessários para tomar decisões financeiras mais inteligentes.
+
 ## ✨ Como funciona o sistema?
 
-O **Projekt Fin** foi desenhado para oferecer uma experiência premium e *mobile-first* no controlo das finanças pessoais. O sistema divide-se em módulos principais:
+O sistema divide-se nos seguintes módulos principais:
 
 | Módulo | Descrição |
 | :--- | :--- |
