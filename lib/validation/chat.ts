@@ -44,6 +44,8 @@ export const chatRequestSchema = z.object({
   model: z.string().max(64).optional(),
   currency: z.string().max(8).optional(),
   financialContext: z.unknown().optional(),
+  /** Alias opcional do snapshot Market Hub (mesmo shape que financialContext). */
+  contextData: z.unknown().optional(),
 });
 
 export type ChatRequestInput = z.infer<typeof chatRequestSchema>;

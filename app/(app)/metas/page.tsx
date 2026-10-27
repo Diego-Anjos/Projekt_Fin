@@ -4,15 +4,19 @@ import { GoalCard } from "@/components/goal-card";
 import { Pagination } from "@/components/ui/pagination";
 import { GoalModal, type FinancialGoal, type GoalCategory } from "@/components/goal-modal";
 import { useSession } from "@/components/require-session";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import {
   deleteGoal,
+  getAllGoals,
   getGoalImageUrl,
   getGoals,
   type GoalDocument,
 } from "@/lib/appwrite/goals";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { generateGoalsContext } from "@/lib/chat/generate-goals-context";
 import { useTranslation } from "@/hooks/use-translation";
 import { Plus, Target, Trophy } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const itemsPerPage = 6;
@@ -55,7 +59,10 @@ function toFinancialGoal(document: GoalDocument): FinancialGoal {
 export default function MetasPage() {
   const { user } = useSession();
   const { t } = useTranslation();
+  const { setScreenContext } = useQuantumIaScreenContext();
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
+  /** Lista completa (sem paginação) para o resumo da Quantum.IA. */
+  const [allGoalsForIa, setAllGoalsForIa] = useState<FinancialGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [goalToEdit, setGoalToEdit] = useState<FinancialGoal | null>(null);
@@ -130,6 +137,41 @@ export default function MetasPage() {
     };
   }, [user.$id, currentPage, refreshKey, t]);
 
+  // Snapshot completo (sem paginação) para a Quantum.IA.
+  useEffect(() => {
+    let active = true;
+
+    async function loadAllForIa() {
+      try {
+        const documents = await getAllGoals(user.$id);
+        if (!active) return;
+        setAllGoalsForIa(documents.map(toFinancialGoal));
+      } catch (error) {
+        console.warn("[metas] falha ao carregar lista para a Quantum.IA:", error);
+      }
+    }
+
+    void loadAllForIa();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id, refreshKey]);
+
+  const iaContextData = useMemo(
+    (): Partial<FinancialContextPayload> => ({
+      metas: generateGoalsContext(allGoalsForIa),
+    }),
+    [allGoalsForIa],
+  );
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
+
   function openCreateModal() {
     setGoalToEdit(null);
     setIsModalOpen(true);
@@ -149,10 +191,14 @@ export default function MetasPage() {
     if (goalToEdit) {
       // Edição: substitui no lugar (mantém a ordem).
       setGoals((current) => current.map((item) => (item.id === goal.id ? goal : item)));
+      setAllGoalsForIa((current) =>
+        current.map((item) => (item.id === goal.id ? goal : item)),
+      );
       setRefreshKey((key) => key + 1);
       return;
     }
     // Criação: volta à primeira página, onde a nova meta é listada.
+    setAllGoalsForIa((current) => [goal, ...current]);
     if (currentPage !== 1) setCurrentPage(1);
     setRefreshKey((key) => key + 1);
   }
@@ -167,9 +213,11 @@ export default function MetasPage() {
     try {
       await deleteGoal(goal.id, goal.imageId);
       setGoals((current) => current.filter((item) => item.id !== goal.id));
+      setAllGoalsForIa((current) => current.filter((item) => item.id !== goal.id));
       toast.success(t("goals.deleted"));
       // Refetch para reconciliar a lista com o servidor.
       await refetchGoals();
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       console.error("Falha ao excluir meta:", error);
       toast.error(error instanceof Error ? error.message : t("goals.deleteError"));

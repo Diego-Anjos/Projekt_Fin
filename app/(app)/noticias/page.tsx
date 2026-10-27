@@ -1,8 +1,11 @@
 "use client";
 
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import { useDynamicTranslations } from "@/hooks/use-dynamic-translation";
 import { useTranslation } from "@/hooks/use-translation";
 import { getApiAuthHeaders, markAppSession } from "@/lib/appwrite/session";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { generateNewsContext } from "@/lib/chat/generate-news-context";
 import { Newspaper, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -69,8 +72,12 @@ function formatRelativeTime(isoDate: string, t: Translate) {
 function newsPath(activeFilter: NewsCategory, search: string) {
   const term = search.trim();
   const q = term || (activeFilter === "geral" ? "" : filterQueries[activeFilter]);
-  if (!q) return "/api/news";
-  return `/api/news?q=${encodeURIComponent(q)}`;
+  const relative = q ? `/api/news?q=${encodeURIComponent(q)}` : "/api/news";
+  // URL absoluta no browser evita "Failed to fetch" em algumas navegações do App Router.
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${relative}`;
+  }
+  return relative;
 }
 
 function NewsCardSkeleton() {
@@ -173,6 +180,7 @@ function NewsArticleCard({
 
 export default function NoticiasPage() {
   const { t } = useTranslation();
+  const { setScreenContext } = useQuantumIaScreenContext();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<NewsCategory>("geral");
@@ -189,22 +197,30 @@ export default function NoticiasPage() {
     const controller = new AbortController();
 
     async function fetchNews(path: string) {
-      await markAppSession();
-      if (controller.signal.aborted) return null;
+      try {
+        await markAppSession();
+        if (controller.signal.aborted) return null;
 
-      const authHeaders = await getApiAuthHeaders();
-      if (controller.signal.aborted) return null;
+        const authHeaders = await getApiAuthHeaders();
+        if (controller.signal.aborted) return null;
 
-      return fetch(path, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
-      });
+        return await fetch(path, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+            ...authHeaders,
+          },
+        });
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") {
+          return null;
+        }
+        console.error("[noticias] falha de rede ao pedir /api/news:", caught);
+        return null;
+      }
     }
 
     async function loadNews() {
@@ -214,15 +230,32 @@ export default function NoticiasPage() {
       try {
         const path = newsPath(activeFilter, debouncedSearch);
         let response = await fetchNews(path);
-        if (!response || controller.signal.aborted) return;
+        if (controller.signal.aborted) return;
+
+        if (!response) {
+          setArticles([]);
+          setLoadError(t("news.loadError"));
+          return;
+        }
 
         // Retentativa após re-sync se a sessão ainda não estava no cookie.
         if (response.status === 401) {
           response = await fetchNews(path);
-          if (!response || controller.signal.aborted) return;
+          if (controller.signal.aborted) return;
+          if (!response) {
+            setArticles([]);
+            setLoadError(t("news.loadError"));
+            return;
+          }
         }
 
-        const data: unknown = await response.json();
+        let data: unknown = [];
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          console.error("[noticias] resposta inválida de /api/news:", parseError);
+          data = [];
+        }
         if (controller.signal.aborted) return;
 
         if (!response.ok || !Array.isArray(data)) {
@@ -235,6 +268,7 @@ export default function NoticiasPage() {
         setLoadError(null);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
+        console.error("[noticias] erro ao carregar notícias:", caught);
         setArticles([]);
         setLoadError(t("news.loadError"));
       } finally {
@@ -260,6 +294,36 @@ export default function NoticiasPage() {
   );
   const { texts: translatedTexts, isTranslating: isTranslatingArticles } =
     useDynamicTranslations(translatableTexts);
+
+  const unknownSourceLabel = t("news.unknownSource");
+
+  // Snapshot live do ecrã para a Quantum.IA: top 5 manchetes visíveis
+  // (títulos/resumos já traduzidos quando disponíveis) + aba + pesquisa.
+  // Depende de `translatedTexts` estável (useDynamicTranslations memoiza).
+  const iaContextData = useMemo((): Partial<FinancialContextPayload> => {
+    const noticiasNoEcra = articles.map((article, index) => ({
+      source: article.source?.name?.trim() || unknownSourceLabel,
+      title: translatedTexts[index * 2] ?? article.title?.trim() ?? "",
+      description:
+        translatedTexts[index * 2 + 1] || article.description?.trim() || "",
+      publishedAt: article.publishedAt,
+    }));
+
+    return {
+      noticias: generateNewsContext(
+        noticiasNoEcra,
+        activeFilter,
+        debouncedSearch,
+      ),
+    };
+  }, [articles, translatedTexts, unknownSourceLabel, activeFilter, debouncedSearch]);
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
 
   const emptyMessage = loadError ?? t("news.empty");
 

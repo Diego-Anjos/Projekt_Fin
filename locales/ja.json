@@ -13,8 +13,12 @@
     "mainMenu": "メインメニュー",
     "active": "アクティブ",
     "dailyTip": "今日のヒント:",
-    "dailyTipText": "サブスクリプションをまとめて、今月の支出を節約しましょう。",
-    "dailyTipLoading": "データを分析中..."
+    "dailyTipText": "日々の支出を記録して、家計のコントロールを保ちましょう。",
+    "dailyTipLoading": "データを分析中...",
+    "dailyTipGoalFocus": "{category}の支出は合計{amount}です。そこを抑えて「{goal}」の目標達成を早めましょう！",
+    "dailyTipSubscriptionDue": "注意：{name}（{amount}）の更新まであと{days}日です。支払いを確認して予期せぬ請求を防ぎましょう。",
+    "dailyTipPositiveBalance": "素晴らしい！今月は{surplus}の黒字です。一部を投資や目標に回してみませんか？",
+    "dailyTipSpendingAlert": "警告：今月の支出はすでに収入の{percent}%です。今後数日は慎重に。"
   },
   "header": {
     "search": "検索...",

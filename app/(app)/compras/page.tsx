@@ -5,6 +5,7 @@ import { useSession } from "@/components/require-session";
 import { TransactionModal, type PurchaseTransaction } from "@/components/transaction-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import { AppSelect } from "@/components/ui/app-select";
 import { Pagination } from "@/components/ui/pagination";
 import {
@@ -13,6 +14,7 @@ import {
   getTransactions,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
+import { generateTransactionsContext } from "@/lib/chat/generate-transactions-context";
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatInstallmentDescription } from "@/lib/installments";
@@ -67,6 +69,7 @@ export default function ComprasPage() {
   const { currency, privacyMode } = usePreferences();
   const { t, locale } = useTranslation();
   const bcp47 = localeToBcp47[locale];
+  const { setScreenContext } = useQuantumIaScreenContext();
 
   const statusLabel = {
     Paid: t("transactions.paid"),
@@ -75,6 +78,10 @@ export default function ComprasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [transactions, setTransactions] = useState<PurchaseTransaction[]>([]);
+  /** Histórico completo para o resumo da Quantum.IA (não a página paginada). */
+  const [allTransactionsForIa, setAllTransactionsForIa] = useState<PurchaseTransaction[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<PurchaseTransaction | null>(null);
@@ -177,6 +184,41 @@ export default function ComprasPage() {
       active = false;
     };
   }, [user.$id, currentPage, debouncedSearch, month, status, refreshKey]);
+
+  // Snapshot completo (sem paginação) para a Quantum.IA — evita enviar só 10 linhas.
+  useEffect(() => {
+    let active = true;
+
+    async function loadAllForIa() {
+      try {
+        const documents = await getAllTransactions(user.$id);
+        if (!active) return;
+        setAllTransactionsForIa(documents.map(toPurchaseTransaction));
+      } catch (error) {
+        console.warn("[compras] falha ao carregar histórico para a Quantum.IA:", error);
+      }
+    }
+
+    void loadAllForIa();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id, refreshKey]);
+
+  const iaContextData = useMemo(
+    () => ({
+      compras: generateTransactionsContext(allTransactionsForIa),
+    }),
+    [allTransactionsForIa],
+  );
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
 
   // Com paginação no servidor já não dá para derivar os meses da página atual
   // (ficariam só os meses dos 10 itens visíveis), por isso oferecemos os

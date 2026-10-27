@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardSessionBar } from "@/components/dashboard-session-bar";
-import { MarketHubCards } from "@/components/market-hub-cards";
+import {
+  MarketHubCards,
+  type MarketSnapshot,
+} from "@/components/market-hub-cards";
 import { NewsTickerCard } from "@/components/NewsTickerCard";
 import { PortfolioKPIs } from "@/components/portfolio-kpis";
 import { useSession } from "@/components/require-session";
 import { RecentTransactions } from "@/components/recent-transactions";
 import { RecurringSubscriptions } from "@/components/recurring-subscriptions";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
@@ -18,6 +22,8 @@ import {
   type SubscriptionDocument,
   type TransactionDocument,
 } from "@/lib/appwrite/database";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { generateSubscriptionsContext } from "@/lib/chat/generate-subscriptions-context";
 import {
   isCurrentMonthTransaction,
   isFuturePendingTransaction,
@@ -117,6 +123,7 @@ export default function Home() {
   const { currency, privacyMode } = usePreferences();
   const { t, locale } = useTranslation();
   const bcp47 = localeToBcp47[locale];
+  const { setScreenContext } = useQuantumIaScreenContext();
   const [kpis, setKpis] = useState<DashboardKpis>({
     totalWealth: 0,
     wealthGrowth: "0%",
@@ -126,6 +133,19 @@ export default function Home() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  /** Documentos crus para o resumo estruturado da Quantum.IA. */
+  const [subscriptionDocuments, setSubscriptionDocuments] = useState<
+    SubscriptionDocument[]
+  >([]);
+  const [marketData, setMarketData] = useState<MarketSnapshot | null>(null);
+  /** Tipos originais das últimas transações (para o contexto da IA). */
+  const [rawRecentTypes, setRawRecentTypes] = useState<
+    Array<"income" | "expense">
+  >([]);
+
+  const handleMarketDataChange = useCallback((market: MarketSnapshot | null) => {
+    setMarketData(market);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -140,8 +160,16 @@ export default function Home() {
         if (!active) return;
 
         const now = new Date();
+        const recent = recentDashboardTransactions(transactionDocuments, bcp47, now);
 
-        setTransactions(recentDashboardTransactions(transactionDocuments, bcp47, now));
+        setTransactions(recent);
+        setRawRecentTypes(
+          transactionDocuments
+            .filter((document) => isOnOrBeforeCurrentMonthEnd(document.date, now))
+            .slice(0, RECENT_TRANSACTION_LIMIT)
+            .map((document) => document.type),
+        );
+        setSubscriptionDocuments(subscriptionsResponse.documents);
         setSubscriptions(
           subscriptionsResponse.documents.map((document) =>
             toDashboardSubscription(document, bcp47, (date) => t("dashboard.renews", { date })),
@@ -163,6 +191,46 @@ export default function Home() {
     };
   }, [user.$id, bcp47, t]);
 
+  /**
+   * Contexto consolidado do Market Hub para a Quantum.IA.
+   * Recalcula sempre que cotações, KPIs, transações ou assinaturas mudam.
+   */
+  const iaContextData = useMemo((): Partial<FinancialContextPayload> => {
+    return {
+      saldo: kpis.totalWealth,
+      despesasMes: kpis.monthlyExpenses,
+      mercado: marketData
+        ? {
+            dolar: marketData.dollar.buy,
+            euro: marketData.euro.buy,
+            bitcoin: marketData.bitcoin.buy,
+            ibovespa: marketData.ibovespa.points,
+            selic: marketData.selic.rate,
+            cdi: marketData.cdi.rate,
+          }
+        : undefined,
+      portfolio: {
+        totalWealth: kpis.totalWealth,
+        cashFlowMensal: kpis.monthlyCashFlow,
+        gastosMesAtual: kpis.monthlyExpenses,
+      },
+      ultimasTransacoes: transactions.slice(0, 5).map((transaction, index) => ({
+        desc: transaction.description,
+        valor: transaction.amount,
+        tipo: rawRecentTypes[index] ?? "expense",
+      })),
+      assinaturas: generateSubscriptionsContext(subscriptionDocuments),
+    };
+  }, [kpis, marketData, transactions, subscriptionDocuments, rawRecentTypes]);
+
+  // Publica o snapshot live no provider global do chat; limpa ao sair do Dashboard.
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
+
   const formatMoney = (value: number) => formatCurrency(value, currency, privacyMode);
 
   return (
@@ -170,7 +238,10 @@ export default function Home() {
       <DashboardSessionBar />
 
       <section aria-labelledby="market-hub-heading">
-        <MarketHubCards news={<NewsTickerCard />} />
+        <MarketHubCards
+          news={<NewsTickerCard />}
+          onMarketDataChange={handleMarketDataChange}
+        />
       </section>
 
       <section aria-labelledby="portfolio-kpis-heading" className="flex flex-col gap-4">

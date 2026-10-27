@@ -13,8 +13,12 @@
     "mainMenu": "Main menu",
     "active": "Active",
     "dailyTip": "Daily Tip:",
-    "dailyTipText": "Consolidate your subscriptions to save money this month.",
-    "dailyTipLoading": "Analyzing your data..."
+    "dailyTipText": "Stay in control by logging every expense throughout the day.",
+    "dailyTipLoading": "Analyzing your data...",
+    "dailyTipGoalFocus": "Your {category} spending totals {amount}. Cut back there to speed up your {goal} goal!",
+    "dailyTipSubscriptionDue": "Heads up: {name} ({amount}) renews in {days} day(s). Confirm payment to avoid surprises.",
+    "dailyTipPositiveBalance": "Great work! You’re {surplus} ahead this month. Consider putting some of it into investments or goals.",
+    "dailyTipSpendingAlert": "Warning: expenses already make up {percent}% of this month’s income. Be careful over the next few days."
   },
   "header": {
     "search": "Search...",

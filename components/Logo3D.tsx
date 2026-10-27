@@ -74,7 +74,8 @@ function LogoMark() {
   const svg = useLoader(SVGLoader, "/simbolo.svg");
 
   const { shapes, coinAnchor } = useMemo(() => {
-    const rawShapes = svg.paths.flatMap((path) => path.toShapes(true));
+    // three r185+: ShapePath.toShapes() já não aceita o flag isCCW.
+    const rawShapes = svg.paths.flatMap((path) => path.toShapes());
     const box = new THREE.Box3();
 
     for (const shape of rawShapes) {

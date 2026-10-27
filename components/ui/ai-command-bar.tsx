@@ -16,10 +16,15 @@ import {
 } from "@/lib/appwrite/chat-sessions";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
+import { useTranslation } from "@/hooks/use-translation";
 import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { mergeFinancialContext } from "@/lib/chat/financial-context";
+import { generateSystemContext } from "@/lib/chat/generate-system-context";
 import { loadFinancialContext } from "@/lib/chat/load-financial-context";
 import { cn } from "@/lib/utils";
 import { MAX_CHAT_MESSAGE_CHARS, sanitizeChatInput } from "@/lib/validation/chat";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
@@ -36,6 +41,50 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
+
+type SpeechRecognitionResultLike = {
+  readonly transcript: string;
+};
+
+type SpeechRecognitionEventLike = {
+  readonly results: ArrayLike<ArrayLike<SpeechRecognitionResultLike>>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  readonly error: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onstart: ((this: SpeechRecognitionLike, ev: Event) => void) | null;
+  onresult:
+    | ((this: SpeechRecognitionLike, ev: SpeechRecognitionEventLike) => void)
+    | null;
+  onerror:
+    | ((this: SpeechRecognitionLike, ev: SpeechRecognitionErrorEventLike) => void)
+    | null;
+  onend: ((this: SpeechRecognitionLike, ev: Event) => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const speechWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return (
+    speechWindow.SpeechRecognition ??
+    speechWindow.webkitSpeechRecognition ??
+    null
+  );
+}
 
 type Emotion = "happy" | "warning" | "neutral" | "error" | "thinking";
 
@@ -181,6 +230,7 @@ function MessageMarkdown({ content }: { content: string }) {
 export function AiCommandBar() {
   const { user } = useSession();
   const { currency } = usePreferences();
+  const { locale } = useTranslation();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([QUANTUM_WELCOME]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -197,8 +247,10 @@ export function AiCommandBar() {
   // Incrementado ao fechar/carregar outra conversa: saves antigos são ignorados.
   const conversationEpochRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>(AI_MODELS[0].id);
   const [isRecording, setIsRecording] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiAvailable, setIsAiAvailable] = useState(true);
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -210,8 +262,15 @@ export function AiCommandBar() {
   const avatarUrl = typeof user.prefs.avatarUrl === "string" ? user.prefs.avatarUrl : "";
   const initials = getInitials(user.name, user.email);
   const showChat = isExpanded && messages.length > 0 && isChatVisible;
-  /** Snapshot financeiro para a Quantum.IA (saldo / assinaturas / metas). */
+  const { screenContext } = useQuantumIaScreenContext();
+  /** Snapshot financeiro para a Quantum.IA (saldo / assinaturas / metas / Market Hub). */
   const financialContextRef = useRef<FinancialContextPayload | null>(null);
+  const screenContextRef = useRef(screenContext);
+  screenContextRef.current = screenContext;
+
+  useEffect(() => {
+    setSpeechSupported(Boolean(getSpeechRecognitionConstructor()));
+  }, []);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -271,6 +330,13 @@ export function AiCommandBar() {
 
     return () => window.clearInterval(intervalId);
   }, [isLoading]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+    };
+  }, []);
 
   function setActiveSessionId(next: string | null) {
     sessionIdRef.current = next;
@@ -336,10 +402,20 @@ export function AiCommandBar() {
   }, [user.$id]);
 
   // Pré-carrega contexto financeiro; refresca ao expandir o chat.
+  // O snapshot live do ecrã (`screenContext`) funde-se no envio via screenContextRef —
+  // não deve disparar novo fetch de mercado (evita storm sob republicação do ecrã).
   useEffect(() => {
     let active = true;
     void loadFinancialContext(user.$id).then((context) => {
-      if (active) financialContextRef.current = context;
+      if (!active) return;
+      // Consciência total: sistema/auth/termos + snapshot do ecrã actual.
+      financialContextRef.current = mergeFinancialContext(
+        mergeFinancialContext(context, screenContextRef.current),
+        generateSystemContext({
+          isAuthenticated: true,
+          provider: "Email/Senha",
+        }),
+      );
     });
     return () => {
       active = false;
@@ -441,6 +517,76 @@ export function AiCommandBar() {
     abortControllerRef.current?.abort();
   }
 
+  function stopSpeechRecognition() {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setIsRecording(false);
+      return;
+    }
+    recognitionRef.current = null;
+    try {
+      recognition.stop();
+    } catch {
+      recognition.abort();
+    }
+    setIsRecording(false);
+  }
+
+  function toggleRecording() {
+    if (isLoading) return;
+
+    if (isRecording) {
+      stopSpeechRecognition();
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognitionConstructor();
+    if (!SpeechRecognition) {
+      toast.error("O seu navegador não suporta reconhecimento de voz.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = localeToBcp47[locale] ?? "pt-BR";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onstart = () => setIsRecording(true);
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (!transcript) return;
+      setQuery((prev) => {
+        const next = prev + (prev ? " " : "") + transcript;
+        return next.slice(0, MAX_CHAT_MESSAGE_CHARS);
+      });
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error !== "aborted" && event.error !== "no-speech") {
+        console.error("Erro no reconhecimento de voz:", event.error);
+        toast.error("Não foi possível captar a voz. Tente novamente.");
+      }
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error("Falha ao iniciar o reconhecimento de voz:", error);
+      recognitionRef.current = null;
+      setIsRecording(false);
+      toast.error("Não foi possível iniciar o microfone.");
+    }
+  }
+
   function handleLoadSession(session: ChatSessionDocument) {
     abortControllerRef.current?.abort();
     const stored = parseStoredMessages(session.messages) as ChatMessage[];
@@ -455,12 +601,12 @@ export function AiCommandBar() {
 
   function handleClose() {
     abortControllerRef.current?.abort();
+    stopSpeechRecognition();
     conversationEpochRef.current += 1;
     setActiveSessionId(null);
     setMessages([QUANTUM_WELCOME]);
     setIsChatVisible(true);
     setShowHistory(false);
-    setIsRecording(false);
     setIsLoading(false);
     setIsExpanded(false);
     setQuery("");
@@ -527,14 +673,22 @@ export function AiCommandBar() {
     let finalAssistant: ChatMessage = assistantPlaceholder;
 
     try {
-      // Dados reais do utilizador: refresca antes de cada pedido para respostas exactas.
-      const financialContext =
+      // Dados reais do utilizador + snapshot live do Market Hub (ecrã).
+      const loadedContext =
         (await loadFinancialContext(user.$id).catch(() => null)) ??
         financialContextRef.current ?? {
           saldo: 0,
-          assinaturas: [] as string[],
-          metas: [] as string[],
+          assinaturas: { listaAtivas: [], totalGastoMensalEstimado: 0 },
+          metas: { listaMetas: [], totalMetasAtivas: 0 },
         };
+      // Regenera data/hora + termos na raiz do payload em cada mensagem.
+      const financialContext = mergeFinancialContext(
+        mergeFinancialContext(loadedContext, screenContextRef.current),
+        generateSystemContext({
+          isAuthenticated: Boolean(user.$id),
+          provider: "Email/Senha",
+        }),
+      );
       financialContextRef.current = financialContext;
 
       const response = await fetch("/api/chat", {
@@ -549,6 +703,7 @@ export function AiCommandBar() {
           model: selectedModel,
           currency: currency || "BRL",
           financialContext,
+          contextData: financialContext,
         }),
       });
 
@@ -1090,13 +1245,35 @@ export function AiCommandBar() {
               <div className="absolute right-2 flex items-center gap-2">
                 <button
                   type="button"
-                  aria-label={isRecording ? "Parar gravação" : "Gravar áudio"}
+                  aria-label={
+                    !speechSupported
+                      ? "Reconhecimento de voz não suportado neste navegador"
+                      : isRecording
+                        ? "Parar gravação"
+                        : "Gravar áudio"
+                  }
                   aria-pressed={isRecording}
-                  disabled={isLoading}
-                  onClick={() => setIsRecording((current) => !current)}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-green-500 transition-colors hover:bg-green-500/10"
+                  title={
+                    speechSupported
+                      ? undefined
+                      : "O seu navegador não suporta reconhecimento de voz."
+                  }
+                  disabled={isLoading || !speechSupported}
+                  onClick={toggleRecording}
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                    isRecording
+                      ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                      : "text-[#10B981] hover:bg-green-500/10 hover:text-white",
+                  )}
                 >
-                  <AudioLines className="size-4 shrink-0" aria-hidden="true" />
+                  <AudioLines
+                    className={cn(
+                      "size-4 shrink-0 transition-colors",
+                      isRecording && "animate-pulse",
+                    )}
+                    aria-hidden="true"
+                  />
                 </button>
 
                 {isLoading ? (

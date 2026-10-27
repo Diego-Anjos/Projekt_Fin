@@ -37,45 +37,49 @@ function isOffTopic(article: unknown): boolean {
 }
 
 export async function GET(request: Request) {
-  if (SKIP_AUTH_IN_DEV) {
-    console.warn(
-      "[api/news] AUTH BYPASS ativo (NODE_ENV=development). Não usar em produção.",
-    );
-  } else {
-    const auth = await requireApiSession(request, "api/news");
-    if (isApiAuthError(auth)) return auth.error;
-  }
-
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q")?.trim() ?? "";
-  const apiKey = process.env.NEWS_API_KEY;
-
-  if (!apiKey || apiKey === "sua_chave_aqui") {
-    return NextResponse.json(
-      { error: "Chave da NewsAPI não configurada." },
-      { status: 500 },
-    );
-  }
-
-  if (q.length > 200) {
-    return NextResponse.json([]);
-  }
-
-  const isGeneral = !q || q.toLowerCase() === "geral";
-
-  // Aba Geral: top-headlines business (BR) — evita política/assuntos gerais.
-  if (isGeneral) {
-    const headlines = await loadArticles(topHeadlinesBusinessUrl(apiKey));
-    if (headlines.length > 0) {
-      return NextResponse.json(headlines.filter((article) => !isOffTopic(article)));
+  try {
+    if (SKIP_AUTH_IN_DEV) {
+      console.warn(
+        "[api/news] AUTH BYPASS ativo (NODE_ENV=development). Não usar em produção.",
+      );
+    } else {
+      const auth = await requireApiSession(request, "api/news");
+      if (isApiAuthError(auth)) return auth.error;
     }
 
-    const fallback = await loadArticles(everythingUrl(apiKey, generalQuery));
-    return NextResponse.json(fallback.filter((article) => !isOffTopic(article)));
-  }
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("q")?.trim() ?? "";
+    const apiKey = process.env.NEWS_API_KEY;
 
-  const articles = await loadArticles(everythingUrl(apiKey, q));
-  return NextResponse.json(articles.filter((article) => !isOffTopic(article)));
+    // Misconfiguração / rate-limit / falha externa → [] (UI mostra empty state).
+    if (!apiKey || apiKey === "sua_chave_aqui") {
+      console.warn("[api/news] NEWS_API_KEY ausente ou placeholder — a servir [].");
+      return NextResponse.json([]);
+    }
+
+    if (q.length > 200) {
+      return NextResponse.json([]);
+    }
+
+    const isGeneral = !q || q.toLowerCase() === "geral";
+
+    // Aba Geral: top-headlines business (BR) — evita política/assuntos gerais.
+    if (isGeneral) {
+      const headlines = await loadArticles(topHeadlinesBusinessUrl(apiKey));
+      if (headlines.length > 0) {
+        return NextResponse.json(headlines.filter((article) => !isOffTopic(article)));
+      }
+
+      const fallback = await loadArticles(everythingUrl(apiKey, generalQuery));
+      return NextResponse.json(fallback.filter((article) => !isOffTopic(article)));
+    }
+
+    const articles = await loadArticles(everythingUrl(apiKey, q));
+    return NextResponse.json(articles.filter((article) => !isOffTopic(article)));
+  } catch (error) {
+    console.error("[api/news] erro inesperado:", error);
+    return NextResponse.json([]);
+  }
 }
 
 function topHeadlinesBusinessUrl(apiKey: string) {

@@ -13,8 +13,12 @@
     "mainMenu": "Menú principal",
     "active": "Activo",
     "dailyTip": "Consejo del día:",
-    "dailyTipText": "Consolida tus suscripciones para ahorrar dinero este mes.",
-    "dailyTipLoading": "Analizando tus datos..."
+    "dailyTipText": "Mantén el control registrando todos tus gastos del día.",
+    "dailyTipLoading": "Analizando tus datos...",
+    "dailyTipGoalFocus": "Tus gastos en {category} suman {amount}. Reduce ese gasto para acelerar tu meta de {goal}.",
+    "dailyTipSubscriptionDue": "Atención: la suscripción {name} ({amount}) vence en {days} día(s). Confirma el pago para evitar sorpresas.",
+    "dailyTipPositiveBalance": "¡Buen trabajo! Tienes un saldo positivo de {surplus} este mes. ¿Y si destinás una parte a inversiones o metas?",
+    "dailyTipSpendingAlert": "Alerta: tus gastos ya representan el {percent}% de los ingresos de este mes. Ten cuidado los próximos días."
   },
   "header": {
     "search": "Buscar...",

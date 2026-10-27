@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   defaultLocale,
@@ -450,9 +450,15 @@ export function useDynamicTranslations(
   const source = options.sourceLocale ?? defaultLocale;
   const enabled = (options.enabled ?? true) && locale !== source;
 
-  const originals = texts.map((text) => text ?? "");
-  // Chave estável do conjunto (o input é recriado a cada render do chamador).
-  const batchKey = enabled ? `${locale}::${JSON.stringify(originals)}` : null;
+  // Chave de conteúdo: o array de entrada é recriado a cada render do chamador.
+  const contentKey = JSON.stringify(texts.map((text) => text ?? ""));
+  const originals = useMemo(
+    () => texts.map((text) => text ?? ""),
+    // contentKey cobre o conteúdo; `texts` muda de referência sem mudar valores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contentKey],
+  );
+  const batchKey = enabled ? `${locale}::${contentKey}` : null;
 
   const [resolved, setResolved] = useState<{
     key: string;
@@ -460,10 +466,14 @@ export function useDynamicTranslations(
   } | null>(null);
 
   // O que mostrar já neste render: cache síncrono onde existir, original no resto.
-  const immediate = originals.map((original) =>
-    enabled && original.trim().length > 0
-      ? (cacheGetSync(locale, original) ?? original)
-      : original,
+  const immediate = useMemo(
+    () =>
+      originals.map((original) =>
+        enabled && original.trim().length > 0
+          ? (cacheGetSync(locale, original) ?? original)
+          : original,
+      ),
+    [originals, enabled, locale],
   );
   const hasMissing =
     enabled &&
@@ -489,13 +499,16 @@ export function useDynamicTranslations(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchKey, locale, source]);
 
-  if (!batchKey) {
-    return { texts: originals, isTranslating: false };
-  }
-  if (resolved?.key === batchKey) {
-    return { texts: resolved.values, isTranslating: false };
-  }
-  return { texts: immediate, isTranslating: hasMissing };
+  const textsOut = useMemo(() => {
+    if (!batchKey) return originals;
+    if (resolved?.key === batchKey) return resolved.values;
+    return immediate;
+  }, [batchKey, originals, resolved, immediate]);
+
+  return {
+    texts: textsOut,
+    isTranslating: Boolean(batchKey && hasMissing && resolved?.key !== batchKey),
+  };
 }
 
 /** Limpa as caches (memória + persistente). Útil em logout/testes. */

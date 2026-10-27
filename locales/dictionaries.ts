@@ -63,6 +63,14 @@ export type Dictionary = {
     dailyTip: string;
     dailyTipText: string;
     dailyTipLoading: string;
+    /** {category}, {amount}, {goal} */
+    dailyTipGoalFocus: string;
+    /** {name}, {days}, {amount} */
+    dailyTipSubscriptionDue: string;
+    /** {surplus} */
+    dailyTipPositiveBalance: string;
+    /** {percent} */
+    dailyTipSpendingAlert: string;
   };
   header: {
     search: string;

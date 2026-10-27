@@ -13,8 +13,12 @@
     "mainMenu": "Menu principal",
     "active": "Actif",
     "dailyTip": "Conseil du jour :",
-    "dailyTipText": "Regroupez vos abonnements pour économiser de l'argent ce mois-ci.",
-    "dailyTipLoading": "Analyse de vos données..."
+    "dailyTipText": "Gardez le contrôle en enregistrant toutes vos dépenses quotidiennes.",
+    "dailyTipLoading": "Analyse de vos données...",
+    "dailyTipGoalFocus": "Vos dépenses en {category} totalisent {amount}. Réduisez-les pour accélérer votre objectif {goal} !",
+    "dailyTipSubscriptionDue": "Attention : l’abonnement {name} ({amount}) arrive à échéance dans {days} jour(s). Confirmez le paiement pour éviter les surprises.",
+    "dailyTipPositiveBalance": "Excellent ! Vous avez un solde positif de {surplus} ce mois-ci. Et si vous en placiez une partie en investissements ou objectifs ?",
+    "dailyTipSpendingAlert": "Alerte : vos dépenses représentent déjà {percent}% des revenus de ce mois. Soyez prudent ces prochains jours."
   },
   "header": {
     "search": "Rechercher...",

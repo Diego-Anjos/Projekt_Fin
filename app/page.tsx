@@ -268,6 +268,25 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
+        // Defesa em profundidade: Zod já exige terms===true, mas o Appwrite
+        // não valida termos — bloquear aqui antes de createAccount.
+        const termsGate = registerFormSchema.safeParse({
+          name: values.name ?? "",
+          email: values.email,
+          password: values.password,
+          terms: values.terms === true,
+        });
+        if (!termsGate.success) {
+          const termsIssue = termsGate.error.issues.find(
+            (issue) => issue.path[0] === "terms",
+          );
+          setError(
+            termsIssue?.message ??
+              "Você precisa concordar com os Termos e Condições.",
+          );
+          return;
+        }
+
         await account.create(
           ID.unique(),
           values.email,

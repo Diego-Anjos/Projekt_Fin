@@ -5,13 +5,20 @@ import { useSession } from "@/components/require-session";
 import { SubscriptionModal, type ServiceSubscription } from "@/components/subscription-modal";
 import { useConfirm } from "@/contexts/confirm-dialog-context";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import { Pagination } from "@/components/ui/pagination";
-import { deleteSubscription, getSubscriptions, type SubscriptionDocument } from "@/lib/appwrite/database";
+import {
+  deleteSubscription,
+  getAllSubscriptions,
+  getSubscriptions,
+  type SubscriptionDocument,
+} from "@/lib/appwrite/database";
+import { generateSubscriptionsContext } from "@/lib/chat/generate-subscriptions-context";
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
 import { formatCurrency } from "@/lib/utils";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const ITEMS_PER_PAGE = 10;
@@ -46,6 +53,7 @@ export default function SubscriptionsPage() {
   const { currency, privacyMode } = usePreferences();
   const { t, locale } = useTranslation();
   const bcp47 = localeToBcp47[locale];
+  const { setScreenContext } = useQuantumIaScreenContext();
 
   const cycleLabel = {
     monthly: t("subscriptions.cycleMonthly"),
@@ -61,6 +69,10 @@ export default function SubscriptionsPage() {
   const [editingSubscription, setEditingSubscription] = useState<ServiceSubscription | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<ServiceSubscription[]>([]);
+  /** Lista completa (sem paginação) para o resumo da Quantum.IA. */
+  const [allSubscriptionsForIa, setAllSubscriptionsForIa] = useState<
+    SubscriptionDocument[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -110,6 +122,41 @@ export default function SubscriptionsPage() {
       active = false;
     };
   }, [user.$id, currentPage, refreshKey, t]);
+
+  // Histórico completo para a IA — a grelha UI continua paginada.
+  useEffect(() => {
+    let active = true;
+
+    async function loadAllForIa() {
+      try {
+        const documents = await getAllSubscriptions(user.$id);
+        if (!active) return;
+        setAllSubscriptionsForIa(documents);
+      } catch (error) {
+        console.warn("[assinaturas] falha ao carregar lista para a Quantum.IA:", error);
+      }
+    }
+
+    void loadAllForIa();
+
+    return () => {
+      active = false;
+    };
+  }, [user.$id, refreshKey]);
+
+  const iaContextData = useMemo(
+    () => ({
+      assinaturas: generateSubscriptionsContext(allSubscriptionsForIa),
+    }),
+    [allSubscriptionsForIa],
+  );
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
 
   function openCreateModal() {
     setEditingSubscription(null);

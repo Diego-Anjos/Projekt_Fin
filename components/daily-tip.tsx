@@ -5,15 +5,56 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
 import { useTranslation } from "@/hooks/use-translation";
-import { loadFinancialContext } from "@/lib/chat/load-financial-context";
+import {
+  getAllSubscriptions,
+  getAllTransactions,
+} from "@/lib/appwrite/database";
+import { getGoals } from "@/lib/appwrite/goals";
+import {
+  generateDynamicTip,
+  type DynamicTipInsight,
+} from "@/lib/generate-dynamic-tip";
 import {
   isDailyTipCacheFresh,
   readDailyTipCache,
   todayTipKey,
   writeDailyTipCache,
 } from "@/lib/daily-tip-cache";
+import { formatCurrency } from "@/lib/utils";
 
 type TipStatus = "loading" | "ready" | "fallback";
+
+function formatTipInsight(
+  insight: DynamicTipInsight,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  currency: string,
+): string {
+  switch (insight.kind) {
+    case "goalFocus":
+      return t("sidebar.dailyTipGoalFocus", {
+        category: insight.category.toLowerCase(),
+        amount: formatCurrency(insight.amount, currency, false),
+        goal: insight.goalName,
+      });
+    case "subscriptionDue":
+      return t("sidebar.dailyTipSubscriptionDue", {
+        name: insight.name,
+        days: insight.daysUntil,
+        amount: formatCurrency(insight.amount, currency, false),
+      });
+    case "positiveBalance":
+      return t("sidebar.dailyTipPositiveBalance", {
+        surplus: formatCurrency(insight.surplus, currency, false),
+      });
+    case "spendingAlert":
+      return t("sidebar.dailyTipSpendingAlert", {
+        percent: insight.percent,
+      });
+    case "fallback":
+    default:
+      return t("sidebar.dailyTipText");
+  }
+}
 
 export function DailyTip() {
   const { user } = useSession();
@@ -27,7 +68,7 @@ export function DailyTip() {
 
     async function resolveTip() {
       const cached = readDailyTipCache();
-      if (isDailyTipCacheFresh(cached, user.$id, locale)) {
+      if (isDailyTipCacheFresh(cached, user.$id, locale, currency)) {
         if (!active) return;
         setTip(cached!.tip);
         setStatus("ready");
@@ -37,25 +78,19 @@ export function DailyTip() {
       if (active) setStatus("loading");
 
       try {
-        const financialContext = await loadFinancialContext(user.$id);
+        const [transactions, subscriptions, goalsResult] = await Promise.all([
+          getAllTransactions(user.$id),
+          getAllSubscriptions(user.$id),
+          getGoals(user.$id, 50),
+        ]);
         if (!active) return;
 
-        const response = await fetch("/api/daily-tip", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            financialContext,
-            currency,
-            locale,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`daily-tip HTTP ${response.status}`);
-        }
-
-        const data = (await response.json()) as { tip?: unknown };
-        const nextTip = typeof data.tip === "string" ? data.tip.trim() : "";
+        const insight = generateDynamicTip(
+          transactions,
+          goalsResult.documents,
+          subscriptions,
+        );
+        const nextTip = formatTipInsight(insight, t, currency).trim();
         if (!nextTip) throw new Error("Dica vazia.");
 
         writeDailyTipCache({
@@ -63,11 +98,12 @@ export function DailyTip() {
           generatedAt: todayTipKey(),
           userId: user.$id,
           locale,
+          currency,
         });
 
         if (!active) return;
         setTip(nextTip);
-        setStatus("ready");
+        setStatus(insight.kind === "fallback" ? "fallback" : "ready");
       } catch (error) {
         console.warn("[daily-tip] a usar fallback estático:", error);
         if (!active) return;

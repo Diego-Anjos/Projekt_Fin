@@ -4,7 +4,7 @@ import { getApiAuthHeaders, markAppSession } from "@/lib/appwrite/session";
 import { Bitcoin } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-type MarketSnapshot = {
+export type MarketSnapshot = {
   dollar: { buy: number; variation: number };
   euro: { buy: number; variation: number };
   bitcoin: { buy: number; variation: number };
@@ -83,8 +83,19 @@ const CLIENT_FALLBACK_MARKET: MarketSnapshot = {
   source: "fallback",
 };
 
-export function MarketHubCards({ news }: { news: ReactNode }) {
+export function MarketHubCards({
+  news,
+  onMarketDataChange,
+}: {
+  news: ReactNode;
+  /** Notifica o Dashboard quando as cotações (live ou fallback) estão prontas. */
+  onMarketDataChange?: (market: MarketSnapshot | null) => void;
+}) {
   const [market, setMarket] = useState<MarketSnapshot | null>(null);
+
+  useEffect(() => {
+    onMarketDataChange?.(market);
+  }, [market, onMarketDataChange]);
 
   useEffect(() => {
     const controller = new AbortController();

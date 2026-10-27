@@ -5,6 +5,7 @@ import { AppSelect } from "@/components/ui/app-select";
 import { CategoryBubbleChart, type CategoryBubble } from "@/components/ui/category-bubble-chart";
 import { useSession } from "@/components/require-session";
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import {
   getAllTransactions,
   getSubscriptions,
@@ -25,6 +26,8 @@ import {
   type CashFlowViewMode,
   type CashTransaction,
 } from "@/lib/cash-flow";
+import { generateCashFlowContext } from "@/lib/chat/generate-cash-flow-context";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
 import { getCategoryIcon, normalizeCategoryName } from "@/lib/category-utils";
 import { useTranslation } from "@/hooks/use-translation";
 import { localeToBcp47 } from "@/locales/dictionaries";
@@ -99,6 +102,7 @@ export default function CashFlowPage() {
   const { user } = useSession();
   const { currency, privacyMode } = usePreferences();
   const { t, locale } = useTranslation();
+  const { setScreenContext } = useQuantumIaScreenContext();
   const bcp47 = localeToBcp47[locale];
   const [today] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<CashFlowViewMode>("mensal");
@@ -205,6 +209,36 @@ export default function CashFlowPage() {
 
   const periodLabel =
     viewMode === "mensal" ? formatMonthName(year, month, bcp47) : String(year);
+
+  /** Período legível completo para o contexto da Quantum.IA (ex: "Outubro de 2026"). */
+  const periodLabelFull =
+    viewMode === "mensal" ? formatMonthYear(year, month, bcp47) : String(year);
+
+  /**
+   * Snapshot live do Fluxo de Caixa para a Quantum.IA.
+   * Recalcula quando o utilizador muda período, modo ou os dados carregam.
+   */
+  const iaContextData = useMemo((): Partial<FinancialContextPayload> => {
+    return {
+      fluxoCaixa: generateCashFlowContext({
+        periodoAtual: periodLabelFull,
+        modoVisualizacao: viewMode,
+        entradas: income,
+        saidas: expense,
+        saldoLiquido: balance,
+        categorias: categoryTotals,
+        movimentacoes: largestMoves,
+        limit: 5,
+      }),
+    };
+  }, [periodLabelFull, viewMode, income, expense, balance, categoryTotals, largestMoves]);
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
 
   const balanceTone = privacyMode
     ? "text-zinc-100"

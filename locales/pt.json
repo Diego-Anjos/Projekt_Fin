@@ -13,8 +13,12 @@
     "mainMenu": "Menu principal",
     "active": "Ativo",
     "dailyTip": "Dica do dia:",
-    "dailyTipText": "Consolide as suas assinaturas para poupar dinheiro este mês.",
-    "dailyTipLoading": "A analisar os seus dados..."
+    "dailyTipText": "Mantenha o controlo das suas finanças registando todas as suas despesas diárias.",
+    "dailyTipLoading": "A analisar os seus dados...",
+    "dailyTipGoalFocus": "As suas despesas com {category} somam {amount}. Reduza esse gasto para acelerar a conquista da sua meta da {goal}!",
+    "dailyTipSubscriptionDue": "Atenção: a assinatura {name} ({amount}) vence em {days} dia(s). Confirme o pagamento para evitar surpresas.",
+    "dailyTipPositiveBalance": "Ótimo trabalho! Tem um saldo positivo de {surplus} este mês. Que tal alocar uma parte em investimentos ou metas?",
+    "dailyTipSpendingAlert": "Alerta: as suas despesas já representam {percent}% das receitas deste mês. Tenha cuidado nos próximos dias."
   },
   "header": {
     "search": "Pesquisar...",

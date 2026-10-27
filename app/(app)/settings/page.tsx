@@ -1,6 +1,7 @@
 "use client";
 
 import { usePreferences } from "@/contexts/preferences-context";
+import { useQuantumIaScreenContext } from "@/contexts/quantum-ia-context";
 import {
   createCategory,
   deleteCategory,
@@ -13,13 +14,16 @@ import { DeleteAccountModal } from "@/components/delete-account-modal";
 import { ExportDataModal } from "@/components/export-data-modal";
 import { deleteAllUserData } from "@/lib/appwrite/user-data";
 import { clearAppSessionArtifacts, signOutCurrentSession } from "@/lib/appwrite/session";
+import type { FinancialContextPayload } from "@/lib/chat/financial-context";
+import { generateSettingsContext } from "@/lib/chat/generate-settings-context";
 import { useTranslation } from "@/hooks/use-translation";
+import { localeToBcp47 } from "@/locales/dictionaries";
 import { useRouter } from "next/navigation";
 import { AppSelect } from "@/components/ui/app-select";
 import { useSession } from "@/components/require-session";
 import { getCategoryIcon } from "@/lib/category-utils";
 import { Bell, Download, Loader2, Plus, Tag, Tags, Trash2, UserRound, Wallet } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 type SettingsTab = "perfil" | "preferencias" | "categorias" | "notificacoes" | "dados";
@@ -42,8 +46,51 @@ const fieldClassName =
   "h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none transition-colors duration-200 placeholder:text-zinc-500 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500";
 
 export default function SettingsPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const { user } = useSession();
+  const {
+    currency,
+    privacyMode,
+    alertsEnabled,
+    emailSummaryEnabled,
+  } = usePreferences();
+  const { setScreenContext } = useQuantumIaScreenContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
+
+  // Snapshot seguro para a Quantum.IA — sem senhas, tokens ou session IDs.
+  const iaContextData = useMemo(
+    (): Partial<FinancialContextPayload> => ({
+      configuracoes: generateSettingsContext(
+        { nome: user.name, email: user.email },
+        {
+          idioma: localeToBcp47[locale] ?? "pt-BR",
+          moeda: currency,
+          tema: "dark",
+          modoPrivacidade: privacyMode,
+          alertasVencimento: alertsEnabled,
+          resumoEmail: emailSummaryEnabled,
+        },
+        activeTab,
+      ),
+    }),
+    [
+      user.name,
+      user.email,
+      locale,
+      currency,
+      privacyMode,
+      alertsEnabled,
+      emailSummaryEnabled,
+      activeTab,
+    ],
+  );
+
+  useEffect(() => {
+    setScreenContext(iaContextData);
+    return () => {
+      setScreenContext(null);
+    };
+  }, [iaContextData, setScreenContext]);
 
   return (
     <div className="flex w-full min-w-0 max-w-full flex-col gap-4 md:gap-6">

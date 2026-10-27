@@ -78,7 +78,7 @@ export function getGoalImageUrl(imageId: string) {
     fileId: imageId,
   });
 
-  return typeof url === "string" ? url : url.toString();
+  return String(url);
 }
 
 export async function uploadGoalImage(file: File, userId: string) {

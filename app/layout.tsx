@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
@@ -92,7 +93,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                   warning: "border-amber-500/40",
                 },
               }}
-              style={{ "--width": "28rem" }}
+              style={{ ["--width"]: "28rem" } as CSSProperties}
             />
             </ConfirmDialogProvider>
           </PreferencesProvider>

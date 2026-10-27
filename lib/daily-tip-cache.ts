@@ -6,6 +6,8 @@ export type DailyTipCache = {
   generatedAt: string;
   userId: string;
   locale: string;
+  /** Moeda usada na formatação dos valores da dica (ex.: BRL). */
+  currency?: string;
 };
 
 export function todayTipKey(now = new Date()) {
@@ -35,6 +37,7 @@ export function readDailyTipCache(): DailyTipCache | null {
       generatedAt: parsed.generatedAt,
       userId: parsed.userId,
       locale: parsed.locale,
+      ...(typeof parsed.currency === "string" ? { currency: parsed.currency } : {}),
     };
   } catch {
     return null;
@@ -55,12 +58,14 @@ export function isDailyTipCacheFresh(
   cache: DailyTipCache | null,
   userId: string,
   locale: string,
+  currency?: string,
   now = new Date(),
 ) {
   if (!cache) return false;
   return (
     cache.userId === userId &&
     cache.locale === locale &&
+    (currency === undefined || cache.currency === currency) &&
     cache.generatedAt === todayTipKey(now) &&
     Boolean(cache.tip.trim())
   );
